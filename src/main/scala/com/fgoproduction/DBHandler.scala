@@ -14,7 +14,7 @@ object DataBase extends Enumeration {
 
 object DownloadLinkType extends Enumeration {
   type DownloadLinkType = Value
-  val NA, GooFile, GooFolder, Mega, Other = Value
+  val NA, GooFile, GooFolder, Mega, Adfly, Other = Value
 }
 
 sealed trait DBHandler {
@@ -25,7 +25,7 @@ sealed trait DBHandler {
 
   def write(): Unit
 
-  protected def execute(f: Statement => Any): Any = {
+  protected def execute[T](f: Statement => T): T = {
     val conn = DriverManager getConnection connStr
     val stmt = conn.createStatement()
     try {
@@ -77,12 +77,11 @@ class Series(val name: String,
 
   def select(condition: Iterator[String])
   : Iterator[(Int, String, String, Boolean, Int, Boolean)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
     var sql =
       "SELECT id, name, publisher, ignored, download_progress, ended FROM series"
     if (condition.nonEmpty)
       sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
+    val result = execute(_.executeQuery(sql))
     val ret: mutable.MutableList[(Int, String, String, Boolean, Int, Boolean)] =
       mutable.MutableList()
     while (result.next()) {
@@ -102,7 +101,6 @@ class Series(val name: String,
   )
 
   def write(): Unit = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
     require(!name.isEmpty)
     require(!publisher.isEmpty)
     val sql =
@@ -149,12 +147,11 @@ class Book(val seriesId: Int,
 
   def select(condition: Iterator[String])
   : Iterator[(Int, Int, Int, String, Int, String, String)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
     var sql =
       "SELECT id, series_id, raw_book_detail_id, name, series_order, file_path, cover_path FROM book"
     if (condition.nonEmpty)
       sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
+    val result = execute(_.executeQuery(sql))
     val ret: mutable.MutableList[(Int, Int, Int, String, Int, String, String)] =
       mutable.MutableList()
     while (result.next()) {
@@ -213,12 +210,11 @@ class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
   }
 
   def select(condition: Iterator[String]): Iterator[(Int, String)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
     var sql =
       "SELECT id, tag FROM tag"
     if (condition.nonEmpty)
       sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
+    val result = execute(_.executeQuery(sql))
     val ret: mutable.MutableList[(Int, String)] =
       mutable.MutableList()
     while (result.next()) {
@@ -260,12 +256,11 @@ class TagBookMap(val bookId: Int, val tagId: Int, isInit: Boolean = true)
   }
 
   def select(condition: Iterator[String]): Iterator[(Int, Int, Int)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
     var sql =
       "SELECT id, book_id, tag_id FROM tag_book_map"
     if (condition.nonEmpty)
       sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
+    val result = execute(_.executeQuery(sql))
     val ret: mutable.MutableList[(Int, Int, Int)] =
       mutable.MutableList()
     while (result.next()) {
@@ -307,7 +302,7 @@ class RawBookDetail(val name: String,
       """
         |CREATE TABLE IF NOT EXISTS raw_book_detail (
         |    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        |    name            VARCHAR(128) NOT NULL UNIQUE,
+        |    name            VARCHAR(128) NOT NULL,
         |    page_link       TEXT NOT NULL UNIQUE,
         |    img_link        TEXT NOT NULL,
         |    dl_link         TEXT NOT NULL,
@@ -317,20 +312,32 @@ class RawBookDetail(val name: String,
       """.stripMargin))
   }
 
+  def isNew: Boolean =
+    execute(_.executeQuery("select * from raw_book_detail limit 1"))
+      .next()
+
+  def isRecordExists(dlPageLink: String): Boolean = {
+    val sql =
+      s"SELECT page_link from raw_book_detail where page_link='$dlPageLink'"
+    val result = execute(_.executeQuery(sql))
+    result.next()
+  }
+
   def select(condition: Iterator[String]): Iterator[
     (Int, String, String, String, String, Boolean, DownloadLinkType)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
     var sql =
       "SELECT id, name, page_link, img_link, dl_link, finished, dl_link_type FROM raw_book_detail"
     if (condition.nonEmpty)
-      sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
+      sql += " WHERE " + condition.mkString(" AND ")
     val ret: mutable.MutableList[
       (Int, String, String, String, String, Boolean, DownloadLinkType)] =
       mutable.MutableList()
-    while (result.next()) {
-      ret += getRow(result)
-    }
+    execute(x => {
+      val result = x.executeQuery(sql)
+      while (result.next()) {
+        ret += getRow(result)
+      }
+    })
     ret.iterator
   }
 

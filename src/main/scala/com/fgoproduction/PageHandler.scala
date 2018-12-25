@@ -4,6 +4,7 @@ import java.io.{File, FileOutputStream}
 import java.net.{URL, URLDecoder}
 import java.nio.channels.Channels
 import java.util.NoSuchElementException
+import java.util.concurrent.ExecutorService
 
 import javax.net.ssl.HttpsURLConnection
 import org.jsoup.Jsoup
@@ -13,6 +14,7 @@ import org.openqa.selenium._
 import org.openqa.selenium.firefox.{FirefoxDriver, FirefoxOptions, FirefoxProfile}
 import org.openqa.selenium.support.ui.{ExpectedConditions, WebDriverWait}
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.io.Codec
 import scala.io.Source.fromURL
@@ -79,15 +81,85 @@ class CategoryPageHandler(url: String) extends PageHandler {
     val target = getHrefs(url, "#Blog1_blog-pager-older-link")
     target.headOption
   }
+
+  def init(pool: ExecutorService = java.util.concurrent.Executors
+    .newFixedThreadPool(Runtime.getRuntime.availableProcessors)): Boolean = {
+    try {
+      println("Start Init Server")
+      new Thread(() => exec(pool, apply())).start()
+      true
+    } catch {
+      case e: Exception =>
+        println(e)
+        false
+    }
+  }
+
+  def refresh(): Unit = {
+    println("Start Refresh Resource List")
+
+    @tailrec def core(ls: List[PageHandler]): List[PageHandler] = {
+      ls.head match {
+        case handler: DownloadPageHandler =>
+          if (!handler.isNew) {
+            return List()
+          }
+        case _ =>
+      }
+      core(ls.tail ++ ls.head())
+    }
+
+    core(apply())
+    println("Finished")
+  }
+
+  @tailrec private def exec(pool: ExecutorService,
+                            ls: List[PageHandler]): List[PageHandler] = {
+    if (ls.isEmpty) {
+      println("Finish Init Server")
+      pool.shutdown()
+      return List()
+    }
+    exec(pool, ls.map(x => pool.submit(() => x())).flatMap(_ get))
+  }
 }
 
 class DownloadPageHandler(url: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
+  def isNew: Boolean = new RawBookDetail().isNew
+
+  private def isFolder(link: String): Boolean =
+    link.contains("google") && (link.contains("drive/folders") || link
+      .contains("folderview"))
+
   override def apply(): List[PageHandler] = {
-    // get title, img_link, dl_link
+    if (new RawBookDetail().isRecordExists(url)) {
+      println(s"Resource detail at $url is already fetched")
+      return List()
+    }
+
     try {
-      println(s"$getTitle,$url,$getImgLink,${getDlLink.getOrElse("N/A")}")
+      val title = getTitle
+      println(s"Handling $title")
+      val imgLink = getImgLink
+      val dlLink = getDlLink.getOrElse("N/A")
+      val dlLinkType = Map(
+        "N/A" -> DownloadLinkType.NA,
+        "google" -> {
+          if (isFolder(dlLink)) {
+            DownloadLinkType.GooFolder
+          } else {
+            DownloadLinkType.GooFile
+          }
+        },
+        "mega" -> DownloadLinkType.Mega,
+        "adf.ly" -> DownloadLinkType.Adfly
+      ).filterKeys(dlLink contains).headOption match {
+        case Some((_, v)) => v
+        case None => DownloadLinkType.Other
+      }
+      new RawBookDetail(title, url, imgLink, dlLink, false, dlLinkType).write()
     } catch {
       case e: NoSuchElementException =>
         println(s"FUCK! $url")
@@ -135,6 +207,7 @@ class DownloadPageHandler(url: String) extends PageHandler {
             x.contains("docs.google") ||
             x.contains("mediafire")
       )
+
 }
 
 class DownloadImageHandler(url: String) extends PageHandler {
@@ -170,14 +243,15 @@ class DownloadGooHandler(url: String) extends PageHandler {
     }
   }
 
-  val isFolder: Boolean = url.contains("drive/folders") || url.contains("folderview")
-
   override def apply(): List[PageHandler] = {
-    // TODO
-    if (isFolder) {
-
-    } else {
+    try {
       download(getGooDownloadLink, System.getProperty("user.dir"))
+    } catch {
+      case _: NullPointerException => {
+        val link = new RawBookDetail().select(Iterator(s"dl_link='$url'")).next()._3
+        println(s"Page resource $link is not valid now, please verify")
+      }
+      case e: Exception => throw e
     }
     List()
   }

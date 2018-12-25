@@ -1,35 +1,69 @@
 package com.fgoproduction
 
 import java.io.File
-import java.util.concurrent.ExecutorService
 
-import scala.annotation.tailrec
+import spark.Spark._
+
 import scala.language.postfixOps
 
-
 object Main extends App {
+  final val startUrl = "http://epubln.blogspot.com/"
+
+  def setUp(customPort: Int): Unit = {
+    initDB()
+    System.setProperty(
+      "webdriver.gecko.driver",
+      s"${System.getProperty("user.dir")}${File.separator}geckodriver.exe"
+    )
+    commonSparkSetUp(customPort)
+  }
+
   def initDB(): Unit = {
-    List(new Series(), new RawBookDetail(), new Book(), new Tag(), new TagBookMap())
+    List(new Series(),
+      new RawBookDetail(),
+      new Book(),
+      new Tag(),
+      new TagBookMap())
       .foreach(_ ())
   }
+
+  def commonSparkSetUp(customPort: Int): Unit = {
+    notFound("<html><body><h1>404 Not Found</h1></body></html>")
+    internalServerError(
+      "<html><body><h1>500 Internal Server Error</h1></body></html>")
+    staticFiles.location("/static")
+    staticFiles.expireTime(600)
+    port(customPort)
+    threadPool(4)
+    after((_, response) => response.header("Content-Encoding", "gzip"))
+  }
+
   override def main(args: Array[String]): Unit = {
-    initDB()
-    System.setProperty("webdriver.gecko.driver", s"${System.getProperty("user.dir")}${File.separator}geckodriver.exe")
-    val url = "http://epubln.blogspot.com/"
-    //    val pool = java.util.concurrent.Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors)
-    //    exec(pool, new CategoryPageHandler(url)())
-
-    //    new DownloadImageHandler("https://4.bp.blogspot.com/-lo4EL8MeMRU/XBpqK29tt4I/AAAAAAAAC0k/gXvx_-jhGLkrUwEpby05z0e5_aPv4QnWACLcBGAs/s1600/01.jpg")()
-    //        new DownloadGooHandler("https://drive.google.com/file/d/0B1amSk7l_U52MHNjdE4zamVfQzA/view?usp=sharinghttps://drive.google.com/file/d/0B1amSk7l_U52MHNjdE4zamVfQzA/view?usp=sharing")()
-    //    new DownloadMegaHandler("https://mega.nz/#!YEZzXSxK!FtqZCn5t-ieExGFlSU-nST9vYchS3HgAiNLolXFaZws")()
-    //    new AdflyHandler("http://adf.ly/V2n1B")()
+    //    val p = if (args.isEmpty) { 8080 } else {
+    //      try {
+    //        args.head.asInstanceOf[Int]
+    //      } catch {
+    //        case e: Exception =>
+    //          println(s"${args.head} is not a valid port number.")
+    //          throw e
+    //      }
+    //    }
+    //    setUp(p)
+    //    get("/", (_, _) => "Fuck you")
+    //    path("/api", () => {
+    //      post("/init_server", (_, _) => {
+    //        if (new CategoryPageHandler(startUrl).init()) {
+    //          "Success"
+    //        } else {
+    //          "Fail"
+    //        }
+    //      })
+    //      post("/stop", (_, _) => {
+    //        stop()
+    //        "Stopped"
+    //      })
+    //    })
+    new DownloadGooHandler("https://drive.google.com/file/d/0B_u3N_VNVprha3NqOEc3dUxNRkU/view?usp=sharing")()
   }
 
-  @tailrec def exec(pool: ExecutorService, it: List[PageHandler]): List[PageHandler] = {
-    if (it.isEmpty) {
-      pool.shutdownNow()
-      return List()
-    }
-    exec(pool, it.map(x => pool.submit(() => x())).flatMap(_ get))
-  }
 }

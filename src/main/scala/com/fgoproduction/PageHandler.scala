@@ -9,6 +9,9 @@ import javax.net.ssl.HttpsURLConnection
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.select.Elements
+import org.openqa.selenium._
+import org.openqa.selenium.firefox.{FirefoxDriver, FirefoxOptions, FirefoxProfile}
+import org.openqa.selenium.support.ui.{ExpectedConditions, WebDriverWait}
 
 import scala.collection.JavaConverters._
 import scala.io.Codec
@@ -94,14 +97,14 @@ class DownloadPageHandler(url: String) extends PageHandler {
     List()
   }
 
-  def getTitle: String =
+  private def getTitle: String =
     doc
       .getElementsByAttributeValue("rel", "bookmark")
       .asScala
       .map(_.text())
       .head
 
-  def getImgLink: String = {
+  private def getImgLink: String = {
     doc
       .getElementsByAttributeValue("imageanchor", "1")
       .asScala
@@ -119,7 +122,7 @@ class DownloadPageHandler(url: String) extends PageHandler {
     }
   }
 
-  def getDlLink: Option[String] =
+  private def getDlLink: Option[String] =
     doc
       .getElementsByTag("a")
       .asScala
@@ -178,8 +181,58 @@ class DownloadMegaHandler(url: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
   override def apply(): List[PageHandler] = {
-    List()
+    val profile = new FirefoxProfile()
+    profile.setPreference("browser.download.panel.shown", false)
+    profile.setPreference("browser.download.manager.showWhenStarting", false)
+    profile.setPreference("browser.download.folderList", 2)
+    profile.setPreference("browser.download.dir",
+      System.getProperty("user.dir")) // TODO
+    profile.setPreference("browser.helperApps.neverAsk.saveToDisk",
+      "application/epub+zip")
 
+    val options = new FirefoxOptions()
+    //    options.setHeadless(true)
+    options.setProfile(profile)
+
+    val browser = new FirefoxDriver(options)
+    browser.get(url)
+
+    try {
+      val clickBtn = new WebDriverWait(browser, 20)
+        .until(
+          ExpectedConditions.presenceOfElementLocated(
+            By.xpath(
+              "//div[@class='download big-button download-file red transition']")
+          )
+        )
+      clickBtn.click()
+      while (true) {
+        try {
+          val dlProgress = browser
+            .findElementByXPath(
+              "//div[@class='download info-txt small-txt']")
+            .findElements(By.tagName("span"))
+          if (dlProgress
+            .asScala
+            .map(_.getText)
+            .toSet
+            .size == 1 && dlProgress.size() != 1) {
+            throw new StaleElementReferenceException("Finish")
+          }
+        } catch {
+          case _: NoSuchElementException | _: InvalidSelectorException =>
+          case e: Exception => throw e
+        } finally {
+          Thread.sleep(1000)
+        }
+      }
+    } catch {
+      case _: StaleElementReferenceException =>
+      case e: Exception => throw e
+    } finally {
+      browser.quit()
+    }
+    List()
   }
 }
 

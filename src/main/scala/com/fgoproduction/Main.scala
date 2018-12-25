@@ -14,9 +14,11 @@ object Main extends App {
   override def main(args: Array[String]): Unit = {
     initDB()
     val url = "http://epubln.blogspot.com/"
-    val pool = java.util.concurrent.Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors)
-    exec(pool, new CategoryPageHandler(url)())
-    //    println(new DownloadPageHandler("http://epubln.blogspot.com/2018/11/06_7.html").getImgLink)
+    //    val pool = java.util.concurrent.Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors)
+    //    exec(pool, new CategoryPageHandler(url)())
+
+    //    new DownloadImageHandler("https://4.bp.blogspot.com/-lo4EL8MeMRU/XBpqK29tt4I/AAAAAAAAC0k/gXvx_-jhGLkrUwEpby05z0e5_aPv4QnWACLcBGAs/s1600/01.jpg")()
+    new DownloadGooHandler("https://drive.google.com/open?id=1dah5YX6AE62c4v88MoAq2OUkHkg2XIJa")()
   }
 
   @tailrec def exec(pool: ExecutorService, it: List[PageHandler]): List[PageHandler] = {

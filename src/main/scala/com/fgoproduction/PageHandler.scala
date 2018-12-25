@@ -170,9 +170,15 @@ class DownloadGooHandler(url: String) extends PageHandler {
     }
   }
 
+  val isFolder: Boolean = url.contains("drive/folders") || url.contains("folderview")
+
   override def apply(): List[PageHandler] = {
     // TODO
-    download(getGooDownloadLink, System.getProperty("user.dir"))
+    if (isFolder) {
+
+    } else {
+      download(getGooDownloadLink, System.getProperty("user.dir"))
+    }
     List()
   }
 }
@@ -209,11 +215,9 @@ class DownloadMegaHandler(url: String) extends PageHandler {
       while (true) {
         try {
           val dlProgress = browser
-            .findElementByXPath(
-              "//div[@class='download info-txt small-txt']")
+            .findElementByXPath("//div[@class='download info-txt small-txt']")
             .findElements(By.tagName("span"))
-          if (dlProgress
-            .asScala
+          if (dlProgress.asScala
             .map(_.getText)
             .toSet
             .size == 1 && dlProgress.size() != 1) {
@@ -240,7 +244,12 @@ class AdflyHandler(url: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
   override def apply(): List[PageHandler] = {
-    List()
-
+    val link = doc
+      .getElementsByTag("iframe")
+      .asScala
+      .filter(_ hasAttr "allowtransparency")
+      .head
+      .attr("src")
+    List(new DownloadGooHandler(link))
   }
 }

@@ -20,8 +20,9 @@ object Main extends App {
     //    exec(pool, new CategoryPageHandler(url)())
 
     //    new DownloadImageHandler("https://4.bp.blogspot.com/-lo4EL8MeMRU/XBpqK29tt4I/AAAAAAAAC0k/gXvx_-jhGLkrUwEpby05z0e5_aPv4QnWACLcBGAs/s1600/01.jpg")()
-    //    new DownloadGooHandler("https://drive.google.com/open?id=1dah5YX6AE62c4v88MoAq2OUkHkg2XIJa")()
-    new DownloadMegaHandler("https://mega.nz/#!YEZzXSxK!FtqZCn5t-ieExGFlSU-nST9vYchS3HgAiNLolXFaZws")()
+    //        new DownloadGooHandler("https://drive.google.com/file/d/0B1amSk7l_U52MHNjdE4zamVfQzA/view?usp=sharinghttps://drive.google.com/file/d/0B1amSk7l_U52MHNjdE4zamVfQzA/view?usp=sharing")()
+    //    new DownloadMegaHandler("https://mega.nz/#!YEZzXSxK!FtqZCn5t-ieExGFlSU-nST9vYchS3HgAiNLolXFaZws")()
+    //    new AdflyHandler("http://adf.ly/V2n1B")()
   }
 
   @tailrec def exec(pool: ExecutorService, it: List[PageHandler]): List[PageHandler] = {

@@ -1,21 +1,49 @@
 package com.fgoproduction
 
 import java.io.File
+import java.net.URL
 
+import com.moandjiezana.toml.Toml
 import spark.Spark._
 
+import scala.io.Source.fromURL
 import scala.language.postfixOps
 
 object Main extends App {
   final val startUrl = "http://epubln.blogspot.com/"
 
-  def setUp(customPort: Int): Unit = {
+  override def main(args: Array[String]): Unit = {
+    setUp(new Toml().read(new File("conf.toml")))
+  }
+
+  def setUp(conf: Toml): Unit = {
+    val p = conf.getLong("port", 8080L).toInt
     initDB()
     System.setProperty(
       "webdriver.gecko.driver",
       s"${System.getProperty("user.dir")}${File.separator}geckodriver.exe"
     )
-    commonSparkSetUp(customPort)
+    commonSparkSetUp(p)
+    setUpPath(p)
+  }
+
+  def setUpPath(port: Int): Unit = {
+    get("/", (_, _) => fromURL(new URL(s"http://localhost:$port/html/index.html")).mkString)
+    path("/api", () => {
+      post("/init_server", (_, res) => {
+        if (new CategoryPageHandler(startUrl).init()) {
+          res.status(200)
+          "Success"
+        } else {
+          res.status(500)
+          "Fail"
+        }
+      })
+      post("/stop", (_, _) => {
+        stop()
+        ""
+      })
+    })
   }
 
   def initDB(): Unit = {
@@ -31,39 +59,12 @@ object Main extends App {
     notFound("<html><body><h1>404 Not Found</h1></body></html>")
     internalServerError(
       "<html><body><h1>500 Internal Server Error</h1></body></html>")
-    staticFiles.location("/static")
+    staticFiles.location("/")
     staticFiles.expireTime(600)
     port(customPort)
     threadPool(4)
     after((_, response) => response.header("Content-Encoding", "gzip"))
-  }
-
-  override def main(args: Array[String]): Unit = {
-    //    val p = if (args.isEmpty) { 8080 } else {
-    //      try {
-    //        args.head.asInstanceOf[Int]
-    //      } catch {
-    //        case e: Exception =>
-    //          println(s"${args.head} is not a valid port number.")
-    //          throw e
-    //      }
-    //    }
-    //    setUp(p)
-    //    get("/", (_, _) => "Fuck you")
-    //    path("/api", () => {
-    //      post("/init_server", (_, _) => {
-    //        if (new CategoryPageHandler(startUrl).init()) {
-    //          "Success"
-    //        } else {
-    //          "Fail"
-    //        }
-    //      })
-    //      post("/stop", (_, _) => {
-    //        stop()
-    //        "Stopped"
-    //      })
-    //    })
-    new DownloadGooHandler("https://drive.google.com/file/d/0B_u3N_VNVprha3NqOEc3dUxNRkU/view?usp=sharing")()
+    init()
   }
 
 }

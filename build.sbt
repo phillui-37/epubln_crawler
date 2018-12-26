@@ -14,3 +14,5 @@ libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "3.141.59"
 libraryDependencies += "org.xerial" % "sqlite-jdbc" % "3.25.2"
 // restful
 libraryDependencies += "com.sparkjava" % "spark-core" % "2.7.2"
+// toml
+libraryDependencies += "com.moandjiezana.toml" % "toml4j" % "0.7.2"

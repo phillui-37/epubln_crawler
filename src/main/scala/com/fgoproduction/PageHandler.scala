@@ -247,10 +247,9 @@ class DownloadGooHandler(url: String) extends PageHandler {
     try {
       download(getGooDownloadLink, System.getProperty("user.dir"))
     } catch {
-      case _: NullPointerException => {
+      case _: NullPointerException =>
         val link = new RawBookDetail().select(Iterator(s"dl_link='$url'")).next()._3
         println(s"Page resource $link is not valid now, please verify")
-      }
       case e: Exception => throw e
     }
     List()

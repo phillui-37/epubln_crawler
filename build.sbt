@@ -12,4 +12,7 @@ libraryDependencies += "org.jsoup" % "jsoup" % "1.8.3"
 libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "3.141.59"
 // sqlite
 libraryDependencies += "org.xerial" % "sqlite-jdbc" % "3.25.2"
-// wtever
+// restful
+libraryDependencies += "com.sparkjava" % "spark-core" % "2.7.2"
+// toml
+libraryDependencies += "com.moandjiezana.toml" % "toml4j" % "0.7.2"

@@ -14,18 +14,43 @@ object DataBase extends Enumeration {
 
 object DownloadLinkType extends Enumeration {
   type DownloadLinkType = Value
-  val NA, GooFile, GooFolder, Mega, Other = Value
+  val NA, GooFile, GooFolder, Mega, Adfly, Other = Value
 }
 
 sealed trait DBHandler {
   val connStr = "jdbc:sqlite:lightnovel.db"
   Class.forName("org.sqlite.JDBC")
 
+  type Fields
+  val dbName: String
+
   def apply(): Unit
 
   def write(): Unit
 
-  protected def execute(f: Statement => Any): Any = {
+  def getRow(result: ResultSet): Fields
+
+  def select(condition: Iterator[String]): Iterator[Fields] = {
+    val sqlCache: mutable.StringBuilder = new mutable.StringBuilder(s"SELECT * from $dbName")
+    if (condition.nonEmpty) {
+      sqlCache.append(" WHERE " + condition.mkString(" AND "))
+    }
+    val ret: mutable.MutableList[Fields] = mutable.MutableList()
+    execute(x => {
+      val result = x.executeQuery(sqlCache.toString)
+      while (result.next()) {
+        ret += getRow(result)
+      }
+    })
+    ret.iterator
+  }
+
+  /**
+    * To execute sql
+    *
+    * If you want to get the result, like fetch/next, run it in the closure
+    */
+  protected def execute[T](f: Statement => T): T = {
     val conn = DriverManager getConnection connStr
     val stmt = conn.createStatement()
     try {
@@ -57,14 +82,18 @@ class Series(val name: String,
              val ended: Boolean,
              isInit: Boolean = true)
   extends DBHandler {
+  override type Fields = (Int, String, String, Boolean, Int, Boolean)
+
+  override val dbName: String = "series"
+
   def this() = {
     this("", "", false, 0, false, false)
   }
 
   def apply(): Unit = {
     execute(_.execute(
-      """
-        | CREATE TABLE IF NOT EXISTS series (
+      s"""
+         | CREATE TABLE IF NOT EXISTS $dbName (
         |     id INTEGER PRIMARY KEY AUTOINCREMENT,
         |     name VARCHAR(128) NOT NULL,
         |     publisher VARCHAR(128) NOT NULL,
@@ -75,24 +104,7 @@ class Series(val name: String,
       """.stripMargin))
   }
 
-  def select(condition: Iterator[String])
-  : Iterator[(Int, String, String, Boolean, Int, Boolean)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
-    var sql =
-      "SELECT id, name, publisher, ignored, download_progress, ended FROM series"
-    if (condition.nonEmpty)
-      sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
-    val ret: mutable.MutableList[(Int, String, String, Boolean, Int, Boolean)] =
-      mutable.MutableList()
-    while (result.next()) {
-      ret += getRow(result)
-    }
-    ret.iterator
-  }
-
-  private def getRow(
-                      result: ResultSet): (Int, String, String, Boolean, Int, Boolean) = (
+  override def getRow(result: ResultSet): Fields = (
     result.getInt("id"),
     result.getString("name"),
     result.getString("publisher"),
@@ -102,11 +114,10 @@ class Series(val name: String,
   )
 
   def write(): Unit = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
     require(!name.isEmpty)
     require(!publisher.isEmpty)
     val sql =
-      "INSERT INTO series(name,publisher,ignored,download_progress,ended) values(?,?,?,?,?);"
+      s"INSERT INTO $dbName(name,publisher,ignored,download_progress,ended) values(?,?,?,?,?);"
     prepareExecute(sql, stmt => {
       stmt.setString(1, name)
       stmt.setString(2, publisher)
@@ -125,6 +136,9 @@ class Book(val seriesId: Int,
            val coverPath: String,
            isInit: Boolean = true)
   extends DBHandler {
+  override type Fields = (Int, Int, Int, String, Int, String, String)
+  override val dbName: String = "book"
+
   def this() = {
     this(0, 0, "", 0, "", "", false)
   }
@@ -132,8 +146,8 @@ class Book(val seriesId: Int,
   def apply(): Unit = {
     execute(
       _.execute(
-        """
-          | CREATE TABLE IF NOT EXISTS book (
+        s"""
+           | CREATE TABLE IF NOT EXISTS $dbName (
           |     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
           |     series_id           INTEGER NOT NULL,
           |     raw_book_detail_id  INTEGER NOT NULL,
@@ -147,24 +161,7 @@ class Book(val seriesId: Int,
         """.stripMargin))
   }
 
-  def select(condition: Iterator[String])
-  : Iterator[(Int, Int, Int, String, Int, String, String)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
-    var sql =
-      "SELECT id, series_id, raw_book_detail_id, name, series_order, file_path, cover_path FROM book"
-    if (condition.nonEmpty)
-      sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
-    val ret: mutable.MutableList[(Int, Int, Int, String, Int, String, String)] =
-      mutable.MutableList()
-    while (result.next()) {
-      ret += getRow(result)
-    }
-    ret.iterator
-  }
-
-  private def getRow(
-                      result: ResultSet): (Int, Int, Int, String, Int, String, String) = (
+  override def getRow(result: ResultSet): Fields = (
     result.getInt("id"),
     result.getInt("series_id"),
     result.getInt("raw_book_detail_id"),
@@ -182,7 +179,7 @@ class Book(val seriesId: Int,
     require(!filePath.isEmpty)
     require(!coverPath.isEmpty)
     val sql =
-      "INSERT INTO book(series_id,raw_book_detail_id,name,series_order,file_path,cover_path) values(?,?,?,?,?,?,?);"
+      s"INSERT INTO $dbName(series_id,raw_book_detail_id,name,series_order,file_path,cover_path) values(?,?,?,?,?,?,?);"
     prepareExecute(
       sql,
       stmt => {
@@ -198,36 +195,23 @@ class Book(val seriesId: Int,
 }
 
 class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
+  override type Fields = (Int, String)
+  override val dbName: String = "tag"
   def this() = {
     this("", false)
   }
 
   def apply(): Unit = {
     execute(_.execute(
-      """
-        | CREATE TABLE IF NOT EXISTS tag (
+      s"""
+         | CREATE TABLE IF NOT EXISTS $dbName (
         |     id  INTEGER PRIMARY KEY AUTOINCREMENT,
         |     tag VARCHAR(128) NOT NULL
         | );
       """.stripMargin))
   }
 
-  def select(condition: Iterator[String]): Iterator[(Int, String)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
-    var sql =
-      "SELECT id, tag FROM tag"
-    if (condition.nonEmpty)
-      sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
-    val ret: mutable.MutableList[(Int, String)] =
-      mutable.MutableList()
-    while (result.next()) {
-      ret += getRow(result)
-    }
-    ret.iterator
-  }
-
-  private def getRow(result: ResultSet): (Int, String) = (
+  override def getRow(result: ResultSet): Fields = (
     result.getInt("id"),
     result.getString("tag")
   )
@@ -235,7 +219,7 @@ class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
   def write(): Unit = {
     if (!isInit) throw new RuntimeException(s"$this not initialized")
     require(!tag.isEmpty)
-    val sql = "INSERT INTO tag(tag) values(?);"
+    val sql = s"INSERT INTO $dbName(tag) values(?);"
     prepareExecute(sql, stmt => {
       stmt.setString(1, tag)
     })
@@ -244,12 +228,15 @@ class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
 
 class TagBookMap(val bookId: Int, val tagId: Int, isInit: Boolean = true)
   extends DBHandler {
+  type Fields = (Int, Int, Int)
+  override val dbName: String = "tag_book_map"
+
   def this() = this(0, 0, false)
 
   def apply(): Unit = {
     execute(_.execute(
-      """
-        |CREATE TABLE IF NOT EXISTS tag_book_map (
+      s"""
+         |CREATE TABLE IF NOT EXISTS $dbName (
         |    id      INTEGER PRIMARY KEY AUTOINCREMENT,
         |    book_id INTEGER NOT NULL,
         |    tag_id  INTEGER NOT NULL,
@@ -259,22 +246,7 @@ class TagBookMap(val bookId: Int, val tagId: Int, isInit: Boolean = true)
       """.stripMargin))
   }
 
-  def select(condition: Iterator[String]): Iterator[(Int, Int, Int)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
-    var sql =
-      "SELECT id, book_id, tag_id FROM tag_book_map"
-    if (condition.nonEmpty)
-      sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
-    val ret: mutable.MutableList[(Int, Int, Int)] =
-      mutable.MutableList()
-    while (result.next()) {
-      ret += getRow(result)
-    }
-    ret.iterator
-  }
-
-  private def getRow(result: ResultSet): (Int, Int, Int) = (
+  override def getRow(result: ResultSet): Fields = (
     result.getInt("id"),
     result.getInt("book_id"),
     result.getInt("tag_id")
@@ -284,7 +256,7 @@ class TagBookMap(val bookId: Int, val tagId: Int, isInit: Boolean = true)
     if (!isInit) throw new RuntimeException(s"$this not initialized")
     require(bookId > 0)
     require(tagId > 0)
-    val sql = "INSERT INTO tag_book_map(book_id,tag_id) values(?,?);"
+    val sql = s"INSERT INTO $dbName(book_id,tag_id) values(?,?);"
     prepareExecute(sql, stmt => {
       stmt.setInt(1, bookId)
       stmt.setInt(2, tagId)
@@ -300,14 +272,17 @@ class RawBookDetail(val name: String,
                     val dlLinkType: DownloadLinkType,
                     isInit: Boolean = true)
   extends DBHandler {
+  override type Fields = (Int, String, String, String, String, Boolean, DownloadLinkType)
+  override val dbName: String = "raw_book_detail"
+
   def this() = this("", "", "", "", false, DownloadLinkType.NA, false)
 
   def apply(): Unit = {
     execute(_.execute(
-      """
-        |CREATE TABLE IF NOT EXISTS raw_book_detail (
+      s"""
+         |CREATE TABLE IF NOT EXISTS $dbName (
         |    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        |    name            VARCHAR(128) NOT NULL UNIQUE,
+        |    name            VARCHAR(128) NOT NULL,
         |    page_link       TEXT NOT NULL UNIQUE,
         |    img_link        TEXT NOT NULL,
         |    dl_link         TEXT NOT NULL,
@@ -317,25 +292,20 @@ class RawBookDetail(val name: String,
       """.stripMargin))
   }
 
-  def select(condition: Iterator[String]): Iterator[
-    (Int, String, String, String, String, Boolean, DownloadLinkType)] = {
-    if (!isInit) throw new RuntimeException(s"$this not initialized")
-    var sql =
-      "SELECT id, name, page_link, img_link, dl_link, finished, dl_link_type FROM raw_book_detail"
-    if (condition.nonEmpty)
-      sql += condition.foldLeft(" WHERE ")((x, y) => s"$x AND $y")
-    val result = execute(_.execute(sql)).asInstanceOf[ResultSet]
-    val ret: mutable.MutableList[
-      (Int, String, String, String, String, Boolean, DownloadLinkType)] =
-      mutable.MutableList()
-    while (result.next()) {
-      ret += getRow(result)
-    }
-    ret.iterator
+  def isNew: Boolean =
+    execute(_.executeQuery(s"select * from $dbName limit 1"))
+      .next()
+
+  def isRecordExists(dlPageLink: String): Boolean = {
+    val sql =
+      s"SELECT page_link from $dbName where page_link='$dlPageLink'"
+    execute(x => {
+      val result = x.executeQuery(sql)
+      result.next()
+    })
   }
 
-  private def getRow(result: ResultSet)
-  : (Int, String, String, String, String, Boolean, DownloadLinkType) = (
+  override def getRow(result: ResultSet): Fields = (
     result.getInt("id"),
     result.getString("name"),
     result.getString("page_link"),
@@ -352,7 +322,7 @@ class RawBookDetail(val name: String,
     require(!imgLink.isEmpty)
     require(!dlLink.isEmpty)
     val sql =
-      "INSERT INTO raw_book_detail(name,page_link,img_link,dl_link,finished,dl_link_type) values(?,?,?,?,?,?);"
+      s"INSERT INTO $dbName(name,page_link,img_link,dl_link,finished,dl_link_type) values(?,?,?,?,?,?);"
     prepareExecute(
       sql,
       stmt => {

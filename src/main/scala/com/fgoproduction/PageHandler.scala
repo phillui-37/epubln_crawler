@@ -4,50 +4,67 @@ import java.io.{File, FileOutputStream}
 import java.net.{URL, URLDecoder}
 import java.nio.channels.Channels
 import java.util.NoSuchElementException
+import java.util.concurrent.ExecutorService
 
 import javax.net.ssl.HttpsURLConnection
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.select.Elements
+import org.openqa.selenium._
+import org.openqa.selenium.firefox.{FirefoxDriver, FirefoxOptions, FirefoxProfile}
+import org.openqa.selenium.support.ui.{ExpectedConditions, WebDriverWait}
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.io.Codec
 import scala.io.Source.fromURL
+import scala.language.postfixOps
 
 sealed trait PageHandler {
   val doc: Document
 
   def apply(): List[PageHandler]
 
-  def docFn(url: String): Document = Jsoup parse src(url)
+  final def docFn(url: String): Document = Jsoup parse src(url)
 
-  def src(url: String): String = fromURL(url)(Codec.UTF8).mkString
+  final def src(url: String): String = fromURL(url)(Codec.UTF8).mkString
 
-  def getHrefs(url: String, selector: String): List[String] = {
+  final def getHrefs(url: String, selector: String): List[String] = {
     selectDoc(url, selector).asScala
       .map(_ attr "href")
       .toList
   }
 
-  def selectDoc(url: String, selector: String): Elements =
+  final def selectDoc(url: String, selector: String): Elements =
     doc select selector
 
-  def downloadImage(url: String, path: String): Unit = {
-    val link = new URL(url)
-    val conn = link.openConnection().asInstanceOf[HttpsURLConnection]
-    val fieldValue = conn.getHeaderField("Content-Disposition")
-
-    val fileName = URLDecoder.decode(if (fieldValue.contains("filename*=UTF-8''")) {
-      fieldValue.substring(fieldValue.indexOf("filename*=UTF-8''") + 17, fieldValue.length())
-    } else {
-      fieldValue.substring(fieldValue.indexOf("filename=\"") + 10, fieldValue.length() - 1)
-    }, "UTF-8")
-    val ch = Channels.newChannel(link.openStream())
-    val fos = new FileOutputStream(s"$path${File.separator}$fileName")
-    fos.getChannel.transferFrom(ch, 0, Long.MaxValue)
-    fos.close()
+  final private def getFileNameFromURL(url: String): String = {
+    val content = new URL(url)
+      .openConnection()
+      .asInstanceOf[HttpsURLConnection]
+      .getHeaderField("Content-Disposition")
+    URLDecoder.decode(
+      if (content.contains("filename*=utf-8''") ||
+        content.contains("filename*=UTF-8''")) {
+        content.substring(content.indexOf("''") + 2)
+      } else {
+        content.replaceFirst("(?i)^.*filename=\"?([^\"]+)\"?.*$", "$1")
+      },
+      "UTF-8"
+    )
   }
 
+  final def download(url: String, path: String): Unit = {
+    val fileName = getFileNameFromURL(url)
+    val urlInstance = new URL(url)
+    val rbc = Channels.newChannel(urlInstance.openStream())
+    val fos = new FileOutputStream(s"$path${File.separator}$fileName")
+    try {
+      fos.getChannel.transferFrom(rbc, 0, Long.MaxValue)
+    } finally {
+      fos.close()
+    }
+  }
 }
 
 class CategoryPageHandler(url: String) extends PageHandler {
@@ -64,15 +81,85 @@ class CategoryPageHandler(url: String) extends PageHandler {
     val target = getHrefs(url, "#Blog1_blog-pager-older-link")
     target.headOption
   }
+
+  def init(pool: ExecutorService = java.util.concurrent.Executors
+    .newFixedThreadPool(Runtime.getRuntime.availableProcessors)): Boolean = {
+    try {
+      println("Start Init Server")
+      new Thread(() => exec(pool, apply())).start()
+      true
+    } catch {
+      case e: Exception =>
+        println(e)
+        false
+    }
+  }
+
+  def refresh(): Unit = {
+    println("Start Refresh Resource List")
+
+    @tailrec def core(ls: List[PageHandler]): List[PageHandler] = {
+      ls.head match {
+        case handler: DownloadPageHandler =>
+          if (!handler.isNew) {
+            return List()
+          }
+        case _ =>
+      }
+      core(ls.tail ++ ls.head())
+    }
+
+    core(apply())
+    println("Finished")
+  }
+
+  @tailrec private def exec(pool: ExecutorService,
+                            ls: List[PageHandler]): List[PageHandler] = {
+    if (ls.isEmpty) {
+      println("Finish Init Server")
+      pool.shutdown()
+      return List()
+    }
+    exec(pool, ls.map(x => pool.submit(() => x())).flatMap(_ get))
+  }
 }
 
 class DownloadPageHandler(url: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
+  def isNew: Boolean = new RawBookDetail().isNew
+
+  private def isFolder(link: String): Boolean =
+    link.contains("google") && (link.contains("drive/folders") || link
+      .contains("folderview"))
+
   override def apply(): List[PageHandler] = {
-    // get title, img_link, dl_link
+    if (new RawBookDetail().isRecordExists(url)) {
+      println(s"Resource detail at $url is already fetched")
+      return List()
+    }
+
     try {
-      println(s"$getTitle,$url,$getImgLink,${getDlLink.getOrElse("N/A")}")
+      val title = getTitle
+      println(s"Handling $title")
+      val imgLink = getImgLink
+      val dlLink = getDlLink.getOrElse("N/A")
+      val dlLinkType = Map(
+        "N/A" -> DownloadLinkType.NA,
+        "google" -> {
+          if (isFolder(dlLink)) {
+            DownloadLinkType.GooFolder
+          } else {
+            DownloadLinkType.GooFile
+          }
+        },
+        "mega" -> DownloadLinkType.Mega,
+        "adf.ly" -> DownloadLinkType.Adfly
+      ).filterKeys(dlLink contains).headOption match {
+        case Some((_, v)) => v
+        case None => DownloadLinkType.Other
+      }
+      new RawBookDetail(title, url, imgLink, dlLink, false, dlLinkType).write()
     } catch {
       case e: NoSuchElementException =>
         println(s"FUCK! $url")
@@ -82,14 +169,14 @@ class DownloadPageHandler(url: String) extends PageHandler {
     List()
   }
 
-  def getTitle: String =
+  private def getTitle: String =
     doc
       .getElementsByAttributeValue("rel", "bookmark")
       .asScala
       .map(_.text())
       .head
 
-  def getImgLink: String = {
+  private def getImgLink: String = {
     doc
       .getElementsByAttributeValue("imageanchor", "1")
       .asScala
@@ -107,7 +194,7 @@ class DownloadPageHandler(url: String) extends PageHandler {
     }
   }
 
-  def getDlLink: Option[String] =
+  private def getDlLink: Option[String] =
     doc
       .getElementsByTag("a")
       .asScala
@@ -120,53 +207,108 @@ class DownloadPageHandler(url: String) extends PageHandler {
             x.contains("docs.google") ||
             x.contains("mediafire")
       )
+
 }
 
 class DownloadImageHandler(url: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
   override def apply(): List[PageHandler] = {
-    // TODO get path from db, then save to path
-    val path = System.getProperty("user.dir")
-    downloadImage(url, path)
+    // TODO
+    download(url, System.getProperty("user.dir"))
     List()
   }
 }
 
 class DownloadGooHandler(url: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
+  lazy private val prefix =
+    """\w+?://(\w+?)\.google.com/.*$""".r
+      .findAllIn(url)
+      .matchData
+      .next()
+      .group(1)
+  lazy private val downloadPrefix =
+    s"https://$prefix.google.com/uc?export=download&id="
 
-  val dlLink: String = {
-    val prefix = if (url.contains("drive.google.com")) {
-      "drive"
+  lazy private val getGooDownloadLink: String = {
+    if (url.startsWith(downloadPrefix)) {
+      url
     } else {
-      "docs"
+      List("open?id=", "file/d/")
+        .map(x => s"https://$prefix.google.com/$x")
+        .filter(url startsWith)
+        .map(x => downloadPrefix + url.replace(x, "").split('/').head)
+        .head
     }
-    val dlPrefix: String = s"https://$prefix.google.com/uc?export=download&id="
-    List("open?id=", "file/d/")
-      .map(x => s"https://$prefix.google.com/$x")
-      .filter(url startsWith)
-      .map(x => s"$dlPrefix${url.replace(x, "").split('/').head}")
-      .head
   }
 
   override def apply(): List[PageHandler] = {
-    // TODO
-    downloadImage(dlLink, System.getProperty("user.dir"))
+    try {
+      download(getGooDownloadLink, System.getProperty("user.dir"))
+    } catch {
+      case _: NullPointerException =>
+        val link = new RawBookDetail().select(Iterator(s"dl_link='$url'")).next()._3
+        println(s"Page resource $link is not valid now, please verify")
+      case e: Exception => throw e
+    }
     List()
   }
 }
 
 class DownloadMegaHandler(url: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
-  val dlPrefix = "https://drive.google.com/uc?export=download&id="
-
-  //  def convertDownloadLink(link: String): String = {
-  //    val drivePrefix = """(\w+?).google.com""".r.findAllIn(link).matchData.next()
-  //  }
 
   override def apply(): List[PageHandler] = {
-    // TODO selenium
+    val profile = new FirefoxProfile()
+    profile.setPreference("browser.download.panel.shown", false)
+    profile.setPreference("browser.download.manager.showWhenStarting", false)
+    profile.setPreference("browser.download.folderList", 2)
+    profile.setPreference("browser.download.dir",
+      System.getProperty("user.dir")) // TODO
+    profile.setPreference("browser.helperApps.neverAsk.saveToDisk",
+      "application/epub+zip")
+
+    val options = new FirefoxOptions()
+    //    options.setHeadless(true)
+    options.setProfile(profile)
+
+    val browser = new FirefoxDriver(options)
+    browser.get(url)
+
+    try {
+      val clickBtn = new WebDriverWait(browser, 20)
+        .until(
+          ExpectedConditions.presenceOfElementLocated(
+            By.xpath(
+              "//div[@class='download big-button download-file red transition']")
+          )
+        )
+      clickBtn.click()
+      while (true) {
+        try {
+          val dlProgress = browser
+            .findElementByXPath("//div[@class='download info-txt small-txt']")
+            .findElements(By.tagName("span"))
+          if (dlProgress.asScala
+            .map(_.getText)
+            .toSet
+            .size == 1 && dlProgress.size() != 1) {
+            throw new StaleElementReferenceException("Finish")
+          }
+        } catch {
+          case _: NoSuchElementException | _: InvalidSelectorException =>
+          case e: Exception => throw e
+        } finally {
+          Thread.sleep(1000)
+        }
+      }
+    } catch {
+      case _: StaleElementReferenceException =>
+      case e: Exception => throw e
+    } finally {
+      browser.quit()
+    }
     List()
   }
 }
@@ -175,6 +317,12 @@ class AdflyHandler(url: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
   override def apply(): List[PageHandler] = {
-    List()
+    val link = doc
+      .getElementsByTag("iframe")
+      .asScala
+      .filter(_ hasAttr "allowtransparency")
+      .head
+      .attr("src")
+    List(new DownloadGooHandler(link))
   }
 }

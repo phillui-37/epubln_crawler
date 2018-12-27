@@ -1,12 +1,13 @@
 package com.fgoproduction
 
 import java.io.File
-import java.net.URL
+import java.util
 
 import com.moandjiezana.toml.Toml
+import spark.ModelAndView
 import spark.Spark._
+import spark.template.velocity.VelocityTemplateEngine
 
-import scala.io.Source.fromURL
 import scala.language.postfixOps
 
 object Main extends App {
@@ -21,14 +22,20 @@ object Main extends App {
     initDB()
     System.setProperty(
       "webdriver.gecko.driver",
-      s"${System.getProperty("user.dir")}${File.separator}geckodriver.exe"
+      s"${conf.getString("geckodriver_location")}"
     )
     commonSparkSetUp(p)
     setUpPath(p)
   }
 
   def setUpPath(port: Int): Unit = {
-    get("/", (_, _) => fromURL(new URL(s"http://localhost:$port/html/index.html")).mkString)
+    get("/", (_, _) => {
+      val model = new util.HashMap[String, Any]()
+      model.put("port", port)
+      new VelocityTemplateEngine().render(
+        new ModelAndView(model, "template/index.vm")
+      )
+    })
     path("/api", () => {
       post("/init_server", (_, res) => {
         if (new CategoryPageHandler(startUrl).init()) {
@@ -56,9 +63,9 @@ object Main extends App {
   }
 
   def commonSparkSetUp(customPort: Int): Unit = {
-    notFound("<html><body><h1>404 Not Found</h1></body></html>")
+    notFound("<template><body><h1>404 Not Found</h1></body></template>")
     internalServerError(
-      "<html><body><h1>500 Internal Server Error</h1></body></html>")
+      "<template><body><h1>500 Internal Server Error</h1></body></template>")
     staticFiles.location("/")
     staticFiles.expireTime(600)
     port(customPort)

@@ -210,17 +210,16 @@ class DownloadPageHandler(url: String) extends PageHandler {
 
 }
 
-class DownloadImageHandler(url: String) extends PageHandler {
+class DownloadImageHandler(url: String, downloadDir: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
   override def apply(): List[PageHandler] = {
-    // TODO
-    download(url, System.getProperty("user.dir"))
+    download(url, downloadDir)
     List()
   }
 }
 
-class DownloadGooHandler(url: String) extends PageHandler {
+class DownloadGooHandler(url: String, downloadDir: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
   lazy private val prefix =
     """\w+?://(\w+?)\.google.com/.*$""".r
@@ -245,10 +244,11 @@ class DownloadGooHandler(url: String) extends PageHandler {
 
   override def apply(): List[PageHandler] = {
     try {
-      download(getGooDownloadLink, System.getProperty("user.dir"))
+      download(getGooDownloadLink, downloadDir)
     } catch {
       case _: NullPointerException =>
-        val link = new RawBookDetail().select(Iterator(s"dl_link='$url'")).next()._3
+        val link =
+          new RawBookDetail().select(Iterator(s"dl_link='$url'")).next()._3
         println(s"Page resource $link is not valid now, please verify")
       case e: Exception => throw e
     }
@@ -256,64 +256,80 @@ class DownloadGooHandler(url: String) extends PageHandler {
   }
 }
 
-class DownloadMegaHandler(url: String) extends PageHandler {
+class DownloadMegaHandler(url: String, downloadDir: String)
+  extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
-  override def apply(): List[PageHandler] = {
+  private def setUpProfile: FirefoxProfile = {
     val profile = new FirefoxProfile()
     profile.setPreference("browser.download.panel.shown", false)
     profile.setPreference("browser.download.manager.showWhenStarting", false)
     profile.setPreference("browser.download.folderList", 2)
-    profile.setPreference("browser.download.dir",
-      System.getProperty("user.dir")) // TODO
+    profile.setPreference("browser.download.dir", downloadDir)
     profile.setPreference("browser.helperApps.neverAsk.saveToDisk",
       "application/epub+zip")
+    profile
+  }
 
+  private def setupOptions(profile: FirefoxProfile): FirefoxOptions = {
     val options = new FirefoxOptions()
-    //    options.setHeadless(true)
+    options.setHeadless(true)
     options.setProfile(profile)
+  }
 
-    val browser = new FirefoxDriver(options)
-    browser.get(url)
-
-    try {
-      val clickBtn = new WebDriverWait(browser, 20)
-        .until(
-          ExpectedConditions.presenceOfElementLocated(
-            By.xpath(
-              "//div[@class='download big-button download-file red transition']")
-          )
+  private def waitForPageReadyAndClick(browser: FirefoxDriver, waitTimeout: Long = 20): Unit = {
+    val clickBtn = new WebDriverWait(browser, waitTimeout)
+      .until(
+        ExpectedConditions.presenceOfElementLocated(
+          By.xpath(
+            "//div[@class='download big-button download-file red transition']")
         )
-      clickBtn.click()
-      while (true) {
-        try {
-          val dlProgress = browser
-            .findElementByXPath("//div[@class='download info-txt small-txt']")
-            .findElements(By.tagName("span"))
-          if (dlProgress.asScala
-            .map(_.getText)
-            .toSet
-            .size == 1 && dlProgress.size() != 1) {
-            throw new StaleElementReferenceException("Finish")
-          }
-        } catch {
-          case _: NoSuchElementException | _: InvalidSelectorException =>
-          case e: Exception => throw e
-        } finally {
-          Thread.sleep(1000)
+      )
+    clickBtn.click()
+  }
+
+  private def downloadCore(browser: FirefoxDriver): Unit = {
+    while (true) {
+      try {
+        val dlProgress = browser
+          .findElementByXPath("//div[@class='download info-txt small-txt']")
+          .findElements(By.tagName("span"))
+        if (dlProgress.asScala
+          .map(_.getText)
+          .toSet
+          .size == 1 && dlProgress.size() != 1) {
+          throw new StaleElementReferenceException("Finish")
         }
+      } catch {
+        case _: NoSuchElementException | _: InvalidSelectorException =>
+        case e: Exception => throw e
+      } finally {
+        Thread.sleep(1000)
       }
+    }
+  }
+
+  private def startDownload(browser: FirefoxDriver): Unit = {
+    browser.get(url)
+    try {
+      waitForPageReadyAndClick(browser)
+      downloadCore(browser)
     } catch {
       case _: StaleElementReferenceException =>
       case e: Exception => throw e
     } finally {
       browser.quit()
     }
+  }
+
+  override def apply(): List[PageHandler] = {
+    val browser = new FirefoxDriver(setupOptions(setUpProfile))
+    startDownload(browser)
     List()
   }
 }
 
-class AdflyHandler(url: String) extends PageHandler {
+class AdflyHandler(url: String, downloadDir: String) extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
   override def apply(): List[PageHandler] = {
@@ -323,6 +339,6 @@ class AdflyHandler(url: String) extends PageHandler {
       .filter(_ hasAttr "allowtransparency")
       .head
       .attr("src")
-    List(new DownloadGooHandler(link))
+    List(new DownloadGooHandler(link, downloadDir))
   }
 }

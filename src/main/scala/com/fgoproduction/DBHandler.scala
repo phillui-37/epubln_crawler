@@ -23,15 +23,17 @@ sealed trait DBHandler {
 
   type Fields
   val dbName: String
+  val initDbSql: String
 
-  def apply(): Unit
+  def apply(): Unit = execute(_.execute(initDbSql))
 
   def write(): Unit
 
   def getRow(result: ResultSet): Fields
 
   def select(condition: Iterator[String]): Iterator[Fields] = {
-    val sqlCache: mutable.StringBuilder = new mutable.StringBuilder(s"SELECT * from $dbName")
+    val sqlCache: mutable.StringBuilder =
+      new mutable.StringBuilder(s"SELECT * from $dbName")
     if (condition.nonEmpty) {
       sqlCache.append(" WHERE " + condition.mkString(" AND "))
     }
@@ -85,23 +87,20 @@ class Series(val name: String,
   override type Fields = (Int, String, String, Boolean, Int, Boolean)
 
   override val dbName: String = "series"
+  override val initDbSql: String =
+    s"""
+       | CREATE TABLE IF NOT EXISTS $dbName (
+       |     id INTEGER PRIMARY KEY AUTOINCREMENT,
+       |     name VARCHAR(128) NOT NULL,
+       |     publisher VARCHAR(128) NOT NULL,
+       |     ignored BOOLEAN NOT NULL ,
+       |     download_progress INTEGER NOT NULL,
+       |     ended BOOLEAN NOT NULL
+       | );
+      """.stripMargin
 
   def this() = {
     this("", "", false, 0, false, false)
-  }
-
-  def apply(): Unit = {
-    execute(_.execute(
-      s"""
-         | CREATE TABLE IF NOT EXISTS $dbName (
-        |     id INTEGER PRIMARY KEY AUTOINCREMENT,
-        |     name VARCHAR(128) NOT NULL,
-        |     publisher VARCHAR(128) NOT NULL,
-        |     ignored BOOLEAN NOT NULL ,
-        |     download_progress INTEGER NOT NULL,
-        |     ended BOOLEAN NOT NULL
-        | );
-      """.stripMargin))
   }
 
   override def getRow(result: ResultSet): Fields = (
@@ -138,27 +137,23 @@ class Book(val seriesId: Int,
   extends DBHandler {
   override type Fields = (Int, Int, Int, String, Int, String, String)
   override val dbName: String = "book"
+  override val initDbSql: String =
+    s"""
+       | CREATE TABLE IF NOT EXISTS $dbName (
+       |     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+       |     series_id           INTEGER NOT NULL,
+       |     raw_book_detail_id  INTEGER NOT NULL,
+       |     name                TEXT NOT NULL,
+       |     series_order        INTEGER NOT NULL,
+       |     file_path           TEXT NOT NULL,
+       |     cover_path          TEXT NOT NULL,
+       |     FOREIGN KEY(series_id) REFERENCES series(id),
+       |     FOREIGN KEY(raw_book_detail_id) REFERENCES raw_book_detail(id)
+       | );
+        """.stripMargin
 
   def this() = {
     this(0, 0, "", 0, "", "", false)
-  }
-
-  def apply(): Unit = {
-    execute(
-      _.execute(
-        s"""
-           | CREATE TABLE IF NOT EXISTS $dbName (
-          |     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-          |     series_id           INTEGER NOT NULL,
-          |     raw_book_detail_id  INTEGER NOT NULL,
-          |     name                TEXT NOT NULL,
-          |     series_order        INTEGER NOT NULL,
-          |     file_path           TEXT NOT NULL,
-          |     cover_path          TEXT NOT NULL,
-          |     FOREIGN KEY(series_id) REFERENCES series(id),
-          |     FOREIGN KEY(raw_book_detail_id) REFERENCES raw_book_detail(id)
-          | );
-        """.stripMargin))
   }
 
   override def getRow(result: ResultSet): Fields = (
@@ -197,18 +192,15 @@ class Book(val seriesId: Int,
 class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
   override type Fields = (Int, String)
   override val dbName: String = "tag"
+  override val initDbSql: String =
+    s"""
+       | CREATE TABLE IF NOT EXISTS $dbName (
+       |     id  INTEGER PRIMARY KEY AUTOINCREMENT,
+       |     tag VARCHAR(128) NOT NULL
+       | );
+      """.stripMargin
   def this() = {
     this("", false)
-  }
-
-  def apply(): Unit = {
-    execute(_.execute(
-      s"""
-         | CREATE TABLE IF NOT EXISTS $dbName (
-        |     id  INTEGER PRIMARY KEY AUTOINCREMENT,
-        |     tag VARCHAR(128) NOT NULL
-        | );
-      """.stripMargin))
   }
 
   override def getRow(result: ResultSet): Fields = (
@@ -230,21 +222,18 @@ class TagBookMap(val bookId: Int, val tagId: Int, isInit: Boolean = true)
   extends DBHandler {
   type Fields = (Int, Int, Int)
   override val dbName: String = "tag_book_map"
+  override val initDbSql: String =
+    s"""
+       |CREATE TABLE IF NOT EXISTS $dbName (
+       |    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+       |    book_id INTEGER NOT NULL,
+       |    tag_id  INTEGER NOT NULL,
+       |    FOREIGN KEY(book_id) REFERENCES book(id),
+       |    FOREIGN KEY(tag_id) REFERENCES tag(id)
+       |);
+      """.stripMargin
 
   def this() = this(0, 0, false)
-
-  def apply(): Unit = {
-    execute(_.execute(
-      s"""
-         |CREATE TABLE IF NOT EXISTS $dbName (
-        |    id      INTEGER PRIMARY KEY AUTOINCREMENT,
-        |    book_id INTEGER NOT NULL,
-        |    tag_id  INTEGER NOT NULL,
-        |    FOREIGN KEY(book_id) REFERENCES book(id),
-        |    FOREIGN KEY(tag_id) REFERENCES tag(id)
-        |);
-      """.stripMargin))
-  }
 
   override def getRow(result: ResultSet): Fields = (
     result.getInt("id"),
@@ -272,25 +261,23 @@ class RawBookDetail(val name: String,
                     val dlLinkType: DownloadLinkType,
                     isInit: Boolean = true)
   extends DBHandler {
-  override type Fields = (Int, String, String, String, String, Boolean, DownloadLinkType)
+  override type Fields =
+    (Int, String, String, String, String, Boolean, DownloadLinkType)
   override val dbName: String = "raw_book_detail"
+  override val initDbSql: String =
+    s"""
+       |CREATE TABLE IF NOT EXISTS $dbName (
+       |    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+       |    name            VARCHAR(128) NOT NULL,
+       |    page_link       TEXT NOT NULL UNIQUE,
+       |    img_link        TEXT NOT NULL,
+       |    dl_link         TEXT NOT NULL,
+       |    finished        BOOLEAN DEFAULT 0,
+       |    dl_link_type    INTEGER NOT NULL
+       |);
+      """.stripMargin
 
   def this() = this("", "", "", "", false, DownloadLinkType.NA, false)
-
-  def apply(): Unit = {
-    execute(_.execute(
-      s"""
-         |CREATE TABLE IF NOT EXISTS $dbName (
-        |    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        |    name            VARCHAR(128) NOT NULL,
-        |    page_link       TEXT NOT NULL UNIQUE,
-        |    img_link        TEXT NOT NULL,
-        |    dl_link         TEXT NOT NULL,
-        |    finished        BOOLEAN DEFAULT 0,
-        |    dl_link_type    INTEGER NOT NULL
-        |);
-      """.stripMargin))
-  }
 
   def isNew: Boolean =
     execute(_.executeQuery(s"select * from $dbName limit 1"))

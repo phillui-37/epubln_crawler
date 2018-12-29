@@ -1,17 +1,14 @@
 package com.fgoproduction
 
 import java.io.File
-import java.util
 
 import com.moandjiezana.toml.Toml
-import spark.ModelAndView
 import spark.Spark._
-import spark.template.velocity.VelocityTemplateEngine
 
 import scala.language.postfixOps
 
 object Main extends App {
-  final val startUrl = "http://epubln.blogspot.com/"
+  final private val startUrl: String = "http://epubln.blogspot.com/"
 
   override def main(args: Array[String]): Unit = {
     setUp(new Toml().read(new File("conf.toml")))
@@ -29,28 +26,17 @@ object Main extends App {
   }
 
   def setUpPath(port: Int): Unit = {
-    get("/", (_, _) => {
-      val model = new util.HashMap[String, Any]()
-      model.put("port", port)
-      new VelocityTemplateEngine().render(
-        new ModelAndView(model, "template/index.vm")
-      )
+    path("/", () => {
+      get("", Pages.index(port))
+      post("raw", Pages.unfinishedRawBookDetailList)
     })
-    path("/api", () => {
-      post("/init_server", (_, res) => {
-        if (new CategoryPageHandler(startUrl).init()) {
-          res.status(200)
-          "Success"
-        } else {
-          res.status(500)
-          "Fail"
-        }
-      })
-      post("/stop", (_, _) => {
-        stop()
-        ""
-      })
-    })
+    path(
+      "/api",
+      () => {
+        post("/init_server", API.init_server(startUrl))
+        post("/stop", API.stop_server)
+      }
+    )
   }
 
   def initDB(): Unit = {

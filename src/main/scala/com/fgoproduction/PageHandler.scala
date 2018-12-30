@@ -243,15 +243,16 @@ class DownloadGooHandler(url: String, downloadDir: String) extends PageHandler {
   }
 
   override def apply(): List[PageHandler] = {
+    val ins = new RawBookDetail()
     try {
       download(getGooDownloadLink, downloadDir)
     } catch {
       case _: NullPointerException =>
-        val link =
-          new RawBookDetail().select(Iterator(s"dl_link='$url'")).next()._3
+        val link = ins.select(Iterator(s"dl_link='$url'")).next()._3
         println(s"Page resource $link is not valid now, please verify")
       case e: Exception => throw e
     }
+    ins.finish(ins.select(Iterator(s"dl_link='$url'")).next._1)
     List()
   }
 }
@@ -325,6 +326,8 @@ class DownloadMegaHandler(url: String, downloadDir: String)
   override def apply(): List[PageHandler] = {
     val browser = new FirefoxDriver(setupOptions(setUpProfile))
     startDownload(browser)
+    val ins = new RawBookDetail()
+    ins.finish(ins.select(Iterator(s"dl_link='$url'")).next._1)
     List()
   }
 }

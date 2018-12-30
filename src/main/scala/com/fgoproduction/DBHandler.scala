@@ -35,6 +35,14 @@ sealed trait DBHandler {
 
   def getRow(result: ResultSet): Fields
 
+  def recordsCount(condition: Iterator[String]): Int = {
+    val sqlCache = new mutable.StringBuilder(s"SELECT count(1) FROM $dbName")
+    if (condition.nonEmpty) {
+      sqlCache.append(s" WHERE ${condition.mkString(" AND ")}")
+    }
+    execute(_.executeQuery(sqlCache.mkString).getInt(1))
+  }
+
   def select(condition: Iterator[String] = Iterator(),
              order: String = "",
              isDesc: Boolean = false,
@@ -333,5 +341,10 @@ class RawBookDetail(val name: String,
         stmt.setInt(6, dlLinkType.id)
       }
     )
+  }
+
+  def finish(id: Int): Unit = {
+    execute(_.execute(s"UPDATE $dbName SET finished=true WHERE id=$id"))
+
   }
 }

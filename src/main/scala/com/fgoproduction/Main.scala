@@ -1,6 +1,7 @@
 package com.fgoproduction
 
 import java.io.File
+import java.util.concurrent.{ExecutorService, Executors}
 
 import com.moandjiezana.toml.Toml
 import spark.Spark._
@@ -9,6 +10,7 @@ import scala.language.postfixOps
 
 object Main extends App {
   final private val startUrl: String = "http://epubln.blogspot.com/"
+  final private val globalPool: ExecutorService = Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors)
 
   override def main(args: Array[String]): Unit = {
     setUp(new Toml().read(new File("conf.toml")))
@@ -22,13 +24,15 @@ object Main extends App {
       s"${conf.getString("geckodriver_location")}"
     )
     commonSparkSetUp(p)
-    setUpPath(p)
+    setUpPath(p, conf.getString("dir"))
   }
 
-  def setUpPath(port: Int): Unit = {
+  def setUpPath(port: Int, dir: String): Unit = {
     path("/", () => {
       get("", Pages.index(port))
-      post("raw", Pages.unfinishedRawBookDetailList)
+      post("raw", Pages.rawBookDetailList)
+      post("count", Pages.totalRawRecordSize)
+      post("download", Pages.download(dir, globalPool))
     })
     path(
       "/api",

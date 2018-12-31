@@ -1,3 +1,11 @@
+## minimal implementation
+- ~~book list~~
+- ~~download~~
+- ~~search~~
+- ~~page~~
+- massive download
+- online reading
+
 ## TODO
 - finish basic structure
     - download books

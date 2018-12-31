@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1, shrink-to-fit=no" name="viewport">
+    <title>輕小說站下載器</title>
+    <link rel="stylesheet" href="http://localhost:$port/css/global.css">
+</head>
+<body>
+<div id="core">
+<div class="sidebar">
+    <a href="">未處理目錄</a><br/>
+    <a href="">原始目錄</a>
+</div>
+<div class="content">
+<div class="top"></div>
+<div class="display-area"></div>
+</div>
+</div>
+<script src="http://localhost:$port/js/index.js"></script>
+<script>indexFn.init($port);</script>
+</body>
+</html>

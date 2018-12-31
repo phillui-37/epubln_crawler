@@ -1,0 +1,20 @@
+div.sidebar {
+    float: left;
+    width: 10%;
+}
+
+div.content {
+    width: auto;
+}
+
+img {
+    display: block;
+    max-width: 400px;
+    max-height: 400px;
+    width: auto;
+    height: auto;
+}
+
+table, tr, th, td {
+    border: 1px solid black;
+}

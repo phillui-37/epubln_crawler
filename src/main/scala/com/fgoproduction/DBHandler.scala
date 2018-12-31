@@ -20,6 +20,10 @@ object DownloadLinkType extends Enumeration {
 sealed trait DBHandler {
   val connStr = "jdbc:sqlite:lightnovel.db"
   Class.forName("org.sqlite.JDBC")
+  val defaultValue: Map[String, Any] = Map(
+    "limit" -> 20,
+    "offset" -> 0
+  )
 
   type Fields
   val dbName: String
@@ -31,12 +35,28 @@ sealed trait DBHandler {
 
   def getRow(result: ResultSet): Fields
 
-  def select(condition: Iterator[String]): Iterator[Fields] = {
+  def recordsCount(condition: Iterator[String]): Int = {
+    val sqlCache = new mutable.StringBuilder(s"SELECT count(1) FROM $dbName")
+    if (condition.nonEmpty) {
+      sqlCache.append(s" WHERE ${condition.mkString(" AND ")}")
+    }
+    execute(_.executeQuery(sqlCache.mkString).getInt(1))
+  }
+
+  def select(condition: Iterator[String] = Iterator(),
+             order: String = "",
+             isDesc: Boolean = false,
+             limit: Int = defaultValue("limit").asInstanceOf[Int],
+             offset: Int = defaultValue("offset").asInstanceOf[Int]): Iterator[Fields] = {
     val sqlCache: mutable.StringBuilder =
-      new mutable.StringBuilder(s"SELECT * from $dbName")
+      new mutable.StringBuilder(s"SELECT * FROM $dbName")
     if (condition.nonEmpty) {
       sqlCache.append(" WHERE " + condition.mkString(" AND "))
     }
+    if (order.nonEmpty) {
+      sqlCache.append(s" ORDER BY $order ${if (isDesc) "desc" else "asc"}")
+    }
+    sqlCache.append(s" LIMIT $limit OFFSET $offset")
     val ret: mutable.MutableList[Fields] = mutable.MutableList()
     execute(x => {
       val result = x.executeQuery(sqlCache.toString)
@@ -321,5 +341,10 @@ class RawBookDetail(val name: String,
         stmt.setInt(6, dlLinkType.id)
       }
     )
+  }
+
+  def finish(id: Int): Unit = {
+    execute(_.execute(s"UPDATE $dbName SET finished=true WHERE id=$id"))
+
   }
 }

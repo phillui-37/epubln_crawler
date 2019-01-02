@@ -13,7 +13,7 @@
 ### 安裝及使用(Windows)
 1. 安裝[JAVA](https://www.java.com/zh_TW/)
 2. 下載[Gecko Driver win64版本](https://github.com/mozilla/geckodriver/releases)
-3. 到Release下載epubln_crawler-0.1.jar
+3. 到[Release](https://github.com/phillui-37/epubln_crawler/releases)下載epubln_crawler-0.1.jar
 4. 解壓**geckodriver-v0.23.0-win64.zip**到epubln_crawler-0.1.jar的目錄
 5. 雙擊epubln_crawler-0.1.jar
 6. 打開瀏覽器(Chrome/Firefox)並進入[這裡](http://localhost:8080)

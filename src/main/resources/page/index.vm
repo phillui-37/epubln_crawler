@@ -9,8 +9,9 @@
 <body>
 <div id="core">
 <div class="sidebar">
-    <a href="">未處理目錄</a><br/>
-    <a href="">原始目錄</a>
+    <button type="button" onclick="indexFn.fetchResource()">爬取列表</button><br/>
+    <button type="button" onclick="indexFn.nonHandledBookList();">未處理目錄</button><br/>
+    <button type="button" onclick="indexFn.allBookList();">原始目錄</button>
 </div>
 <div class="content">
 <div class="top"></div>

@@ -3,7 +3,8 @@
 - ~~download~~
 - ~~search~~
 - ~~page~~
-- massive download
+- ~~massive download~~
+- sorting
 - online reading
 - update book list from github release
 

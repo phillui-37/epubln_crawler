@@ -1,5 +1,3 @@
-var isAll = false;
-
 const indexFn = (() => {
     let offset = 0;
     let limit = 20;
@@ -8,7 +6,8 @@ const indexFn = (() => {
     let totalRecordSize = 0;
     let port = 0;
     let search = "";
-    let task;
+    let isAll = false;
+    let downloadQueue = [];
     const createTable = params => {
         let ret = '<table><thead><tr>';
         ret += '<th>全選<input type="checkbox" onchange="indexFn.checkAll()"></th>'
@@ -18,7 +17,7 @@ const indexFn = (() => {
         ret += '</tr></thead><tbody>'
 
         for (const i in params.body) {
-            ret += '<tr><td><input type="checkbox" class="book-option"></td>'
+            ret += '<tr>'
             for (const j in params.body[i]) {
                 ret += `<td>${params.body[i][j]}</td>`
             }
@@ -43,8 +42,10 @@ const indexFn = (() => {
         })
         .catch(console.error);
     const renderTop = async () => {
-        let html = `<div class="search-box"><input id="search" value="${search}" type="text" placeholder="搜尋" oninput="indexFn.search(this.value)"></div>`;
-        html += '<div class="page-nav"><button type="button" onclick="indexFn.prevPage()">上一頁</button><select onchange="indexFn.choosePage(this.value)">';
+        let html = `<div class="search-box"><input id="search" value="${search}" type="text" placeholder="搜尋" oninput="indexFn.setSearch(this.value)"><button type="button" onclick="indexFn.search();">搜尋</button></div>`;
+        html += '<div class="multi-download"><button type="button" onclick="indexFn.invokeServerDownload()">多項下載</button><button type="button" onclick="indexFn.customDownload()">自選目錄下載</button></div>';
+        html += '<div class="page-nav"><button type="button" onclick="indexFn.prevPage()">上一頁</button>';
+        html += '<select onchange="indexFn.choosePage(this.value)">';
         const maxPage = Math.ceil(totalRecordSize / limit);
         for (let i = 1; i <= maxPage; i++) {
             html += `<option value="${i}">${i}</option>`;
@@ -75,9 +76,10 @@ const indexFn = (() => {
             .then(ls => {
                 for (const i in ls) {
                     html.body.push([
+                        `<input type="checkbox" class="book-option" onchange="indexFn.select('${ls[i].dl_link}')">`,
                         `<a href="${ls[i].page_link}">${ls[i].name}</a>`,
                         `<a href="${ls[i].img_link}"><img src="${ls[i].img_link}"></a>`,
-                        `<a href="${ls[i].dl_link}">下載</a>`
+                        `<button type="button" onclick="indexFn.download('${ls[i].dl_link}')">下載</button>`
                     ])
                 }
             })
@@ -85,16 +87,25 @@ const indexFn = (() => {
         document.querySelector("div.display-area").innerHTML = createTable(html);
     };
     return {
-        init: async (p) => {
+        init: async (p = port) => {
             port = p;
             await getTotalRecordSize();
             await renderTop();
             await renderTable();
         },
+        nonHandledBookList: () => {
+            isAll = false;
+            indexFn.init();
+        },
+        allBookList: () => {
+            isAll = true;
+            indexFn.init();
+        },
         checkAll: () => {
             const target = document.getElementsByClassName("book-option");
             for (let i = 0; i < target.length; i++) {
                 target[i].checked = !target[i].checked;
+                target[i].onchange();
             }
         },
         nextPage: () => {
@@ -117,40 +128,57 @@ const indexFn = (() => {
             limit = newLimit;
             indexFn.init(port);
         },
-        search: word => {
-            if (task !== undefined) {
-                clearTimeout(task);
-                task = undefined;
-            }
-            task = setTimeout(async () => {
-                search = word;
-                await indexFn.init(port);
-                const element = document.getElementById('search');
-                if (element.createTextRange) {
-                    const range = element.createTextRange();
-                    range.move('character', search.length);
-                    range.select();
-                } else if (element.setSelectionRange) {
-                    element.focus();
-                    element.setSelectionRange(search.length, search.length);
-                }
-                task = undefined;
-            }, 300);
+        setSearch: word => {
+            search = word;
         },
-        download: dlLinks => {
-            fetch(`http://localhost:${port}/download`, {
+        search: async () => {
+            await indexFn.init(port);
+            const element = document.getElementById('search');
+            if (element.createTextRange) {
+                const range = element.createTextRange();
+                range.move('character', search.length);
+                range.select();
+            } else if (element.setSelectionRange) {
+                element.focus();
+                element.setSelectionRange(search.length, search.length);
+            }
+            task = undefined;
+        },
+        select: dlLink => {
+            if (downloadQueue.includes(dlLink)) {
+                downloadQueue = downloadQueue.filter(x => x != dlLink);
+            } else {
+                downloadQueue.push(dlLink);
+            }
+        },
+        customDownload: async () => {
+            const defaultDir = await fetch(`http://localhost:${port}/api/download_dir`)
+                .then(res => res.text())
+                .catch(console.error);
+            document.querySelector('div.display-area').innerHTML = `<input id="download-custom-dir" value="${defaultDir}" type="text" placeholder="下載"><button type="button" onclick="indexFn.invokeServerDownload(document.querySelector('input#download-custom-dir').value)">下載</button>`;
+        },
+        download: dlLink => {
+            downloadQueue.push(dlLink);
+            indexFn.invokeServerDownload()
+        },
+        invokeServerDownload: async (dir="") => {
+            document.querySelector('div.display-area').innerHTML = '正在下載,請耐心等待';
+            const target = [...downloadQueue];
+            downloadQueue = [];
+            await fetch(`http://localhost:${port}/download`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        dlLinks
+                        dlLinks: target,
+                        dir
                     })
                 })
                 .then(res => res.json())
                 .then(map => {
                     let html;
-                    if (Object.keys(map).length !== 0) {
+                    if (map !== "Success" && Object.keys(map).length !== 0) {
                         html = '以下書本無法下載,請點擊各書本名字查看詳情<br/><ul>';
                         for (const [k, v] of Object.entries(map)) {
                             html += `<li><a href="${v}">${k}</a></li>`
@@ -161,6 +189,14 @@ const indexFn = (() => {
                     }
                     document.querySelector('div.display-area').innerHTML = html;
                 })
+        },
+        fetchResource: () => {
+            fetch(`http://localhost:${port}/api/init_server`, {method: 'POST'})
+                .then(_ => {
+                    document.querySelector('div.display-area').innerHTML = "已開始更新資源列表,5秒後將回到未處理列表"
+                    setTimeout(indexFn.init, 5000);
+                })
+                .catch(console.error);
         }
     };
 })();

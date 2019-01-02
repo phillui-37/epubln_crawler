@@ -4,6 +4,7 @@ import java.io.File
 import java.util.concurrent.ExecutorService
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ArrayNode
 import spark.template.velocity.VelocityTemplateEngine
 import spark.{ModelAndView, Request, Response}
 
@@ -30,7 +31,12 @@ object Pages {
   def rawBookDetailList(req: Request, res: Response): Response = {
     val params = mapper.readTree(req.body())
     val default = mutable.HashMap(
-      "limit" -> 20, "offset" -> 0, "isDesc" -> false, "field" -> "name", "search" -> List(), "isAll" -> false
+      "limit" -> 20,
+      "offset" -> 0,
+      "isDesc" -> false,
+      "field" -> "name",
+      "search" -> List(),
+      "isAll" -> false
     )
     if (params != null) {
       default.keys.foreach(k => {
@@ -39,7 +45,8 @@ object Pages {
             case _: Int => params.get(k).asInt()
             case _: Boolean => params.get(k).asBoolean()
             case _: String => params.get(k).asText()
-            case _: List[Any] => params.get(k).asText().split(" ").filter(_.nonEmpty).toList
+            case _: List[Any] =>
+              params.get(k).asText().split(" ").filter(_.nonEmpty).toList
           }
         }
       })
@@ -49,14 +56,18 @@ object Pages {
       condition += "finished=false"
     }
     if (default("search").asInstanceOf[List[String]].nonEmpty) {
-      default("search").asInstanceOf[List[String]].foreach(x => condition += s"name LIKE '%$x%'")
+      default("search")
+        .asInstanceOf[List[String]]
+        .foreach(x => condition += s"name LIKE '%$x%'")
     }
     val result = new RawBookDetail()
-      .select(condition.iterator,
+      .select(
+        condition.iterator,
         order = default("field").asInstanceOf[String],
         isDesc = default("isDesc").asInstanceOf[Boolean],
         limit = default("limit").asInstanceOf[Int],
-        offset = default("offset").asInstanceOf[Int])
+        offset = default("offset").asInstanceOf[Int]
+      )
       .map(
         x =>
           Map(
@@ -93,34 +104,53 @@ object Pages {
     res
   }
 
-  def download(dir: String, pool: ExecutorService)(req: Request, res: Response): Response = {
+  def download(dir: String, pool: ExecutorService)(req: Request,
+                                                   res: Response): Response = {
     val params = mapper.readTree(req.body)
     if (params == null || !params.has("dlLinks")) {
       res.status(400)
       return res
     }
+    val finalDir = params.get("dir").asText() match {
+      case t if t.isEmpty => dir
+      case t => t
+    }
     val db = new RawBookDetail()
     var taskQueue = mutable.MutableList[PageHandler]()
     val nonHandledList = mutable.HashMap[String, String]()
-    for (link <- params.get("dlLinks").asInstanceOf[List[String]]) {
-      val record = db.select(Iterator(s"dl_link='$link'"))
-      if (record.nonEmpty) {
-        val target = record.next
-        target._7 match {
-          case DownloadLinkType.Adfly => taskQueue += new AdflyHandler(target._5, dir)
-          case DownloadLinkType.Mega => taskQueue += new DownloadMegaHandler(target._5, dir)
-          case DownloadLinkType.GooFile => taskQueue += new DownloadGooHandler(target._5, dir)
-          case DownloadLinkType.GooFolder => nonHandledList.put(target._2, target._3)
+    params
+      .get("dlLinks")
+      .asInstanceOf[ArrayNode]
+      .asScala
+      .map(_.asText())
+      .foreach(link => {
+        val record = db.select(Iterator(s"dl_link='$link'"))
+        if (record.nonEmpty) {
+          val target = record.next
+          target._7 match {
+            case DownloadLinkType.Adfly =>
+              taskQueue += new AdflyHandler(target._5, finalDir)
+            case DownloadLinkType.Mega =>
+              taskQueue += new DownloadMegaHandler(target._5, finalDir)
+            case DownloadLinkType.GooFile =>
+              taskQueue += new DownloadGooHandler(target._5, finalDir)
+            case DownloadLinkType.GooFolder =>
+              nonHandledList.put(target._2, target._3)
+          }
         }
-      }
-    }
+      })
     while (taskQueue.nonEmpty) {
-      taskQueue ++= taskQueue.map(x => pool.submit(() => x())).flatMap(_ get).asInstanceOf[mutable.MutableList[PageHandler]]
+      taskQueue = taskQueue
+        .map(x => pool.submit(() => x()))
+        .flatMap(_ get)
+        .asInstanceOf[mutable.MutableList[PageHandler]]
     }
-    if (nonHandledList.nonEmpty) {
-      res.body(mapper.writeValueAsString(nonHandledList.asJava))
-      res.`type`("application/json")
-    }
+    res.body(mapper.writeValueAsString(if (nonHandledList.nonEmpty) {
+      nonHandledList.asJava
+    } else {
+      "Success"
+    }))
+    res.`type`("application/json")
     res
   }
 }

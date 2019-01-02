@@ -58,6 +58,7 @@ sealed trait PageHandler {
     val fileName = getFileNameFromURL(url)
     val urlInstance = new URL(url)
     val rbc = Channels.newChannel(urlInstance.openStream())
+    new File(path).mkdirs()
     val fos = new FileOutputStream(s"$path${File.separator}$fileName")
     try {
       fos.getChannel.transferFrom(rbc, 0, Long.MaxValue)

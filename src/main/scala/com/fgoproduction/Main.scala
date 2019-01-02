@@ -40,6 +40,7 @@ object Main extends App {
       () => {
         post("/init_server", API.init_server(startUrl))
         post("/stop", API.stop_server)
+        get("/download_dir", (_, _) => dir)
       }
     )
   }

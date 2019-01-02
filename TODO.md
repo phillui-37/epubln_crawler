@@ -5,6 +5,7 @@
 - ~~page~~
 - massive download
 - online reading
+- update book list from github release
 
 ## TODO
 - finish basic structure

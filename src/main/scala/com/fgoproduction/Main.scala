@@ -9,8 +9,9 @@ import spark.Spark._
 import scala.language.postfixOps
 
 object Main extends App {
-  final private val startUrl: String = "http://epubln.blogspot.com/"
-  final private val globalPool: ExecutorService = Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors)
+  def startUrl: String = "http://epubln.blogspot.com/"
+
+  def globalPool: ExecutorService = Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors)
 
   override def main(args: Array[String]): Unit = {
     setUp(new Toml().read(new File("conf.toml")))

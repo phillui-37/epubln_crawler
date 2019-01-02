@@ -197,6 +197,9 @@ const indexFn = (() => {
                     setTimeout(indexFn.init, 5000);
                 })
                 .catch(console.error);
+        },
+        stop: async () => {
+            await fetch(`http://localhost:${port}/api/stop`, {method: 'POST'})
         }
     };
 })();

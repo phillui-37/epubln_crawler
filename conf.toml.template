@@ -1,0 +1,8 @@
+# 注意!!!請不要以雙引號取代單引號!!!
+
+# 下載位置
+dir = 'E:\lightnovel'
+# geckodriver執行檔位置
+geckodriver_location = 'D:\epubln_crawler\geckodriver.exe'
+# 端口位置, 預設為8080
+port = 8080

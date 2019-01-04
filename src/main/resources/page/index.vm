@@ -9,6 +9,7 @@
 <body>
 <div id="core">
 <div class="sidebar">
+    <button type="button" onclick="indexFn.renderUpdateConfPage()">更改配置</button><br/>
     <button type="button" onclick="indexFn.fetchResource()">爬取列表</button><br/>
     <button type="button" onclick="indexFn.nonHandledBookList();">未處理目錄</button><br/>
     <button type="button" onclick="indexFn.allBookList();">原始目錄</button>

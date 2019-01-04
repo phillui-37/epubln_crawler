@@ -87,7 +87,9 @@ class CategoryPageHandler(url: String) extends PageHandler {
     .newFixedThreadPool(Runtime.getRuntime.availableProcessors)): Boolean = {
     try {
       println("Start Init Server")
-      new Thread(() => exec(pool, apply())).start()
+      val thread = new Thread(() => exec(pool, apply()))
+      thread.setDaemon(true)
+      thread.start()
       true
     } catch {
       case e: Exception =>
@@ -99,7 +101,8 @@ class CategoryPageHandler(url: String) extends PageHandler {
   def refresh(): Unit = {
     println("Start Refresh Resource List")
 
-    @tailrec def core(ls: List[PageHandler]): List[PageHandler] = {
+    @tailrec
+    def core(ls: List[PageHandler]): List[PageHandler] = {
       ls.head match {
         case handler: DownloadPageHandler =>
           if (!handler.isNew) {
@@ -114,8 +117,9 @@ class CategoryPageHandler(url: String) extends PageHandler {
     println("Finished")
   }
 
-  @tailrec private def exec(pool: ExecutorService,
-                            ls: List[PageHandler]): List[PageHandler] = {
+  @tailrec
+  private def exec(pool: ExecutorService,
+                   ls: List[PageHandler]): List[PageHandler] = {
     if (ls.isEmpty) {
       println("Finish Init Server")
       pool.shutdown()
@@ -211,7 +215,8 @@ class DownloadPageHandler(url: String) extends PageHandler {
 
 }
 
-class DownloadImageHandler(url: String, downloadDir: String) extends PageHandler {
+class DownloadImageHandler(url: String, downloadDir: String)
+  extends PageHandler {
   override lazy val doc: Document = docFn(url)
 
   override def apply(): List[PageHandler] = {
@@ -279,7 +284,8 @@ class DownloadMegaHandler(url: String, downloadDir: String)
     options.setProfile(profile)
   }
 
-  private def waitForPageReadyAndClick(browser: FirefoxDriver, waitTimeout: Long = 20): Unit = {
+  private def waitForPageReadyAndClick(browser: FirefoxDriver,
+                                       waitTimeout: Long = 20): Unit = {
     val clickBtn = new WebDriverWait(browser, waitTimeout)
       .until(
         ExpectedConditions.presenceOfElementLocated(

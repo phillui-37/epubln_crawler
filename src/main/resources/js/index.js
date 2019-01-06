@@ -1,18 +1,29 @@
 const indexFn = (() => {
     let offset = 0;
     let limit = 20;
-    let isDesc = false;
+    let isDesc = true;
     let field = "name";
     let totalRecordSize = 0;
     let port = 0;
     let search = "";
     let isAll = false;
     let downloadQueue = [];
+    const fieldMap = {
+        "名字": "name",
+        "圖片連接": "img_link",
+        "檔案連接": "dl_link",
+    };
     const createTable = params => {
         let ret = '<table><thead><tr>';
         ret += '<th>全選<input type="checkbox" onchange="indexFn.checkAll()"></th>'
         for (const i in params.head) {
-            ret += `<th>${params.head[i]}</th>`;
+            let text;
+            if (field === fieldMap[params.head[i]]) {
+                text = `<div onclick='indexFn.sort("${fieldMap[params.head[i]]}")'>${params.head[i]} ${isDesc?"&#8595;":"&#8593;"}</div>`
+            } else {
+                text = `<div onclick='indexFn.sort("${fieldMap[params.head[i]]}")'>${params.head[i]}</div>`
+            }
+            ret += `<th>${text}</th>`;
         }
         ret += '</tr></thead><tbody>'
 
@@ -95,6 +106,15 @@ const indexFn = (() => {
             await getTotalRecordSize();
             await renderTop();
             await renderTable();
+        },
+        sort: newField => {
+            if (newField === field) {
+                isDesc = !isDesc;
+            } else {
+                field = newField;
+                isDesc = true;
+            }
+            indexFn.init();
         },
         nonHandledBookList: () => {
             isAll = false;

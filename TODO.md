@@ -6,7 +6,7 @@
 - ~~massive download~~
 - ~~online config editing~~
 - ~~open browser automatically when start server~~
-- sorting
+- ~~sorting~~
 - online reading
 - update book list from github release
 

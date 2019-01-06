@@ -1,6 +1,6 @@
 package com.fgoproduction
 
-import java.io.{File, FileOutputStream}
+import java.io.{BufferedReader, File, FileOutputStream, InputStreamReader}
 import java.net.{URL, URLDecoder}
 import java.nio.channels.Channels
 import java.util.NoSuchElementException
@@ -16,6 +16,7 @@ import org.openqa.selenium.support.ui.{ExpectedConditions, WebDriverWait}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.io.Codec
 import scala.io.Source.fromURL
 import scala.language.postfixOps
@@ -293,10 +294,17 @@ class DownloadMegaHandler(url: String, downloadDir: String)
             "//div[@class='download big-button download-file red transition']")
         )
       )
-    clickBtn.click()
+    Thread.sleep(1000)
+    try {
+      clickBtn.click()
+    } catch {
+      case _: ElementClickInterceptedException => browser.executeScript("document.querySelector(\"div.download.big-button.download-file.red.transition\").click()")
+      case e: Throwable => throw e
+    }
   }
 
   private def downloadCore(browser: FirefoxDriver): Unit = {
+    Thread.sleep(1500)
     while (true) {
       try {
         val dlProgress = browser
@@ -315,10 +323,11 @@ class DownloadMegaHandler(url: String, downloadDir: String)
         Thread.sleep(1000)
       }
     }
+    Thread.sleep(1500)
   }
 
   private def startDownload(browser: FirefoxDriver): Unit = {
-    browser.get(url)
+    browser.get(url.replace(".co", ""))
     try {
       waitForPageReadyAndClick(browser)
       downloadCore(browser)
@@ -340,7 +349,28 @@ class DownloadMegaHandler(url: String, downloadDir: String)
 }
 
 class AdflyHandler(url: String, downloadDir: String) extends PageHandler {
-  override lazy val doc: Document = docFn(url)
+  override lazy val doc: Document = {
+    val ua = "Mozilla/5.0 (X11; Linux x86_64…) Gecko/20100101 Firefox/64.0"
+    val urlIns = new URL(url)
+    val conn = urlIns.openConnection()
+    conn.setRequestProperty("User-Agent", ua)
+    val br = new BufferedReader(new InputStreamReader(conn.getInputStream))
+    val result = mutable.MutableList[String]()
+    try {
+      while (true) {
+        br.readLine() match {
+          case null => throw new RuntimeException()
+          case tmp => result += tmp
+        }
+      }
+    } catch {
+      case _: RuntimeException =>
+      case e: Exception => throw e
+    } finally {
+      br.close()
+    }
+    Jsoup parse result.reduceLeft(_ + _)
+  }
 
   override def apply(): List[PageHandler] = {
     val link = doc
@@ -349,6 +379,7 @@ class AdflyHandler(url: String, downloadDir: String) extends PageHandler {
       .filter(_ hasAttr "allowtransparency")
       .head
       .attr("src")
+    new RawBookDetail().updateDownloadLink(url, link)
     List(new DownloadGooHandler(link, downloadDir))
   }
 }

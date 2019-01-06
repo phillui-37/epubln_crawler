@@ -104,8 +104,7 @@ object Pages {
     res
   }
 
-  def download(dir: String, pool: ExecutorService)(req: Request,
-                                                   res: Response): Response = {
+  def download(dir: String)(req: Request, res: Response): Response = {
     val params = mapper.readTree(req.body)
     if (params == null || !params.has("dlLinks")) {
       res.status(400)
@@ -136,13 +135,13 @@ object Pages {
               taskQueue += new DownloadGooHandler(target._5, finalDir)
             case DownloadLinkType.GooFolder =>
               nonHandledList.put(target._2, target._3)
+            case DownloadLinkType.Other => throw new RuntimeException("Not supported")
           }
         }
       })
     while (taskQueue.nonEmpty) {
       taskQueue = taskQueue
-        .map(x => pool.submit(() => x()))
-        .flatMap(_ get)
+        .flatMap(_())
         .asInstanceOf[mutable.MutableList[PageHandler]]
     }
     res.body(mapper.writeValueAsString(if (nonHandledList.nonEmpty) {

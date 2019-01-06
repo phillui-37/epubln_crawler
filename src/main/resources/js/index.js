@@ -56,7 +56,7 @@ const indexFn = (() => {
         let html = `<div class="search-box"><input id="search" value="${search}" type="text" placeholder="搜尋" oninput="indexFn.setSearch(this.value)"><button type="button" onclick="indexFn.search();">搜尋</button></div>`;
         html += '<div class="multi-download"><button type="button" onclick="indexFn.invokeServerDownload()">多項下載</button><button type="button" onclick="indexFn.customDownload()">自選目錄下載</button></div>';
         html += '<div class="page-nav"><button type="button" onclick="indexFn.prevPage()">上一頁</button>';
-        html += '<select onchange="indexFn.choosePage(this.value)">';
+        html += '<select id="page" onchange="indexFn.choosePage(this.value)">';
         const maxPage = Math.ceil(totalRecordSize / limit);
         for (let i = 1; i <= maxPage; i++) {
             html += `<option value="${i}">${i}</option>`;
@@ -134,12 +134,14 @@ const indexFn = (() => {
         nextPage: () => {
             if (offset < totalRecordSize - limit) {
                 offset += limit;
+                document.querySelector("select#page").value = (offset / limit) + 1;
                 renderTable();
             }
         },
         prevPage: async () => {
             if (offset >= limit) {
                 offset -= limit;
+                document.querySelector("select#page").value = (offset / limit) + 1;
                 renderTable();
             }
         },
@@ -155,6 +157,7 @@ const indexFn = (() => {
             search = word;
         },
         search: async () => {
+            offset = 0;
             await indexFn.init(port);
             const element = document.getElementById('search');
             if (element.createTextRange) {

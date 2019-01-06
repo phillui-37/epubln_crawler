@@ -345,6 +345,9 @@ class RawBookDetail(val name: String,
 
   def finish(id: Int): Unit = {
     execute(_.execute(s"UPDATE $dbName SET finished=true WHERE id=$id"))
+  }
 
+  def updateDownloadLink(oldURL: String, newURL: String): Unit = {
+    execute(_ execute s"UPDATE $dbName SET dl_link='$newURL' WHERE dl_link='$oldURL'")
   }
 }

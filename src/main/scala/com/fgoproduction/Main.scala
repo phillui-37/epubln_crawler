@@ -1,16 +1,13 @@
 package com.fgoproduction
 
-import java.io.{BufferedReader, File, InputStreamReader}
-import java.net.{URI, URL}
+import java.io.File
+import java.net.URI
 import java.util.concurrent.{ExecutorService, Executors}
 
 import com.moandjiezana.toml.Toml
 import spark.Spark._
 
-import scala.collection.mutable
-import scala.io.Codec
 import scala.language.postfixOps
-import scala.io.Source._
 
 object Main extends App {
   def startUrl: String = "http://epubln.blogspot.com/"

@@ -9,12 +9,10 @@
 - ~~sorting~~
 - online reading
 - update book list from github release
+- book title/author/publisher classification
 
 ## TODO
-- finish basic structure
-    - download books
-    - update records
-    - read online???
+- (Urgent)JS big closure -> pure functions + closure as state(global uniform state)
 - allow manual update db by uploading sql
 - (only me) new records output as sql for release
 - load external static resources as diy theme

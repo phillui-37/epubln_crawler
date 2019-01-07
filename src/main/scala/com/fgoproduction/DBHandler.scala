@@ -1,6 +1,6 @@
 package com.fgoproduction
 
-import java.sql.{DriverManager, PreparedStatement, ResultSet, Statement}
+import java.sql._
 
 import com.fgoproduction.DownloadLinkType.DownloadLinkType
 
@@ -97,13 +97,17 @@ sealed trait DBHandler {
   }
 }
 
+trait ToSQL {
+  abstract def toSQL: String
+}
+
 class Series(val name: String,
              val publisher: String,
              val ignored: Boolean,
              val downloadProgress: Int,
              val ended: Boolean,
              isInit: Boolean = true)
-  extends DBHandler {
+  extends DBHandler with ToSQL {
   override type Fields = (Int, String, String, Boolean, Int, Boolean)
 
   override val dbName: String = "series"
@@ -114,7 +118,7 @@ class Series(val name: String,
        |     name VARCHAR(128) NOT NULL,
        |     publisher VARCHAR(128) NOT NULL,
        |     ignored BOOLEAN NOT NULL ,
-       |     download_progress INTEGER NOT NULL,
+       |     progress INTEGER NOT NULL,
        |     ended BOOLEAN NOT NULL
        | );
       """.stripMargin
@@ -143,6 +147,26 @@ class Series(val name: String,
       stmt.setBoolean(3, ignored)
       stmt.setInt(4, downloadProgress)
       stmt.setBoolean(5, ended)
+    })
+  }
+
+  override def toSQL: String = {
+    execute(x => {
+      val ret = mutable.MutableList[String]()
+      val rs = x.executeQuery(
+        s"""
+           |SELECT d.name, d.publisher, d.ignored, d.progress, d.ended
+           |FROM $dbName d, ${new Book().dbName} b, ${new CrawLog().dbName} c, ${new RawBookDetail().dbName} r
+           |WHERE d.id=b.series_id AND b.raw_book_detail_id=r.id AND r.id >= (SELECT raw_id FROM craw_log ORDER BY id DESC LIMIT 1 OFFSET 1)
+        """.stripMargin)
+      while (rs.next()) {
+        ret +=
+          s"""
+             |INSERT INTO $dbName(name,publisher,ignored,progress,ended)
+             |VALUES(${rs.getString(1)},${rs.getString(2)},${rs.getBoolean(3)},${rs.getInt(4)},${rs.getBoolean(5)});
+            """.stripMargin
+      }
+      ret.mkString("\n")
     })
   }
 }
@@ -238,8 +262,39 @@ class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
   }
 }
 
-// TODO
-class TagSeriesMap
+class TagSeriesMap(val seriesId: Int, val tagId: Int, isInit: Boolean = true) extends DBHandler {
+  override type Fields = (Int, Int, Int)
+  override val dbName: String = "tag_series_map"
+  override val initDbSql: String =
+    s"""
+       |CREATE TABLE IF NOT EXISTS $dbName (
+       |  id INTEGER PRIMARY KEY AUTOINCREMENT,
+       |  series_id INTEGER NOT NULL,
+       |  tag_id INTEGER NOT NULL,
+       |  FOREIGN KEY(series_id) REFERENCES series(id),
+       |  FOREIGN KEY(tag_id) REFERENCES tag(id)
+       |);
+    """.stripMargin
+
+  def this() = this(0, 0, false)
+
+  override def write(): Unit = {
+    if (!isInit) throw new RuntimeException(s"$this not initialized")
+    require(seriesId > 0)
+    require(tagId > 0)
+    val sql = s"INSERT INTO $dbName(series_id,tag_id) values(?,?);"
+    prepareExecute(sql, stmt => {
+      stmt.setInt(1, seriesId)
+      stmt.setInt(2, tagId)
+    })
+  }
+
+  override def getRow(result: ResultSet): Fields = (
+    result.getInt("id"),
+    result.getInt("series_id"),
+    result.getInt("tag_id")
+  )
+}
 
 class TagBookMap(val bookId: Int, val tagId: Int, isInit: Boolean = true)
   extends DBHandler {
@@ -353,8 +408,47 @@ class RawBookDetail(val name: String,
   def updateDownloadLink(oldURL: String, newURL: String): Unit = {
     execute(_ execute s"UPDATE $dbName SET dl_link='$newURL' WHERE dl_link='$oldURL'")
   }
+
+  def latestRecordId: Int = {
+    execute(x => {
+      val rs = x.executeQuery(s"SELECT id from $dbName ORDER BY ID DESC LIMIT 1")
+      rs.getInt(1)
+    })
+  }
 }
 
 
-// TODO
-class CrawLog
+class CrawLog(val rawId: Int, isInit: Boolean = true) extends DBHandler {
+  override type Fields = (Int, Int, Long)
+  override val dbName: String = "craw_log"
+  override val initDbSql: String =
+    s"""
+       |CREATE TABLE IF NOT EXISTS $dbName (
+       |  id INTEGER PRIMARY KEY AUTOINCREMENT,
+       |  raw_id INTEGER NOT NULL,
+       |  time_log NUMERIC NOT NULL
+       |);
+    """.stripMargin
+
+  def this() = this(0, false)
+
+  override def write(): Unit = {
+    if (!isInit) throw new RuntimeException(s"$this not initialized")
+    require(rawId > 0)
+    val sql =
+      s"INSERT INTO $dbName(raw_id,time_log) values(?,?);"
+    prepareExecute(
+      sql,
+      stmt => {
+        stmt.setInt(1, rawId)
+        stmt.setLong(2, System.currentTimeMillis())
+      }
+    )
+  }
+
+  override def getRow(result: ResultSet): Fields = (
+    result.getInt("id"),
+    result.getInt("raw_id"),
+    result.getLong("time_log")
+  )
+}

@@ -218,7 +218,7 @@ const indexFn = (() => {
         },
         fetchResource: () => {
             clearTop();
-            fetch(`http://localhost:${port}/api/init_server`, {
+            fetch(`http://localhost:${port}/api/update_db`, {
                     method: 'POST'
                 })
                 .then(_ => {

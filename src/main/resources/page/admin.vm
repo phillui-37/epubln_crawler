@@ -9,9 +9,8 @@
 <body>
 <div id="core">
 <div class="sidebar">
+    <button type="button" onclick="">爬取列表</button><br/>
     <button type="button" onclick="">書籍系列匹配</button><br/>
-    <button type="button" onclick="">系列標籤匹配</button><br/>
-    <button type="button" onclick="">書籍標籤匹配</button><br/>
     <button type="button" onclick="">匯出SQL</button><br/> <!-- 新&全部 -->
     <button type="button" onclick="">???</button>
 </div>

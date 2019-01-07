@@ -84,11 +84,13 @@ class CategoryPageHandler(url: String) extends PageHandler {
     target.headOption
   }
 
-  def init(pool: ExecutorService = java.util.concurrent.Executors
-    .newFixedThreadPool(Runtime.getRuntime.availableProcessors)): Boolean = {
+  def init(pool: ExecutorService): Boolean = {
     try {
       println("Start Init Server")
-      val thread = new Thread(() => exec(pool, apply()))
+      val thread = new Thread(() =>
+        exec(pool, apply(), () => {
+          new CrawLog(new RawBookDetail().latestRecordId).write()
+        }))
       thread.setDaemon(true)
       thread.start()
       true
@@ -119,14 +121,17 @@ class CategoryPageHandler(url: String) extends PageHandler {
   }
 
   @tailrec
-  private def exec(pool: ExecutorService,
-                   ls: List[PageHandler]): List[PageHandler] = {
+  private def exec(
+                    pool: ExecutorService,
+                    ls: List[PageHandler],
+                    finishCb: () => Unit
+                  ): List[PageHandler] = {
     if (ls.isEmpty) {
       println("Finish Init Server")
-      pool.shutdown()
+      finishCb()
       return List()
     }
-    exec(pool, ls.map(x => pool.submit(() => x())).flatMap(_ get))
+    exec(pool, ls.map(x => pool.submit(() => x())).flatMap(_ get), finishCb)
   }
 }
 
@@ -298,7 +303,9 @@ class DownloadMegaHandler(url: String, downloadDir: String)
     try {
       clickBtn.click()
     } catch {
-      case _: ElementClickInterceptedException => browser.executeScript("document.querySelector(\"div.download.big-button.download-file.red.transition\").click()")
+      case _: ElementClickInterceptedException =>
+        browser.executeScript(
+          "document.querySelector(\"div.download.big-button.download-file.red.transition\").click()")
       case e: Throwable => throw e
     }
   }

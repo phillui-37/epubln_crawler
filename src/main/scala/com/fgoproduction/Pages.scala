@@ -152,7 +152,19 @@ object Pages {
     res
   }
 
-  def admin(req: Request, res: Response): String = {
-    ""
+  object Admin {
+    def index(port: Int)(req: Request, res: Response): String = {
+      val f = new File("static/page/admin.html")
+      if (f.exists()) {
+        Source.fromFile(f).getLines().mkString("\n")
+      } else {
+        val model = Map("port" -> port).asJava
+        new VelocityTemplateEngine().render(
+          new ModelAndView(model, "page/admin.vm")
+        )
+      }
+    }
+
+
   }
 }

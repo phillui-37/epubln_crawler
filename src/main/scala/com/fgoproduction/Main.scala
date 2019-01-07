@@ -12,7 +12,10 @@ import scala.language.postfixOps
 object Main extends App {
   def startUrl: String = "http://epubln.blogspot.com/"
 
-  def globalPool: ExecutorService = Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors)
+  def globalPool: ExecutorService = ({
+    val instance = Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors)
+    () => instance
+  }) ()
 
   override def main(args: Array[String]): Unit = {
     val conf = config
@@ -37,22 +40,27 @@ object Main extends App {
 
   def setUpPath(port: Int, dir: String): Unit = {
     path("/", () => {
+      path(
+        "api/",
+        () => {
+          post("update_db", API.updateDbFromGithub)
+          post("stop", API.stopServer)
+          get("download_dir", (_, _) => dir)
+          post("change_conf", API.changeConf(confFileName))
+          get("conf", API.getConf(config))
+        }
+      )
       get("", Pages.index(port))
       post("raw", Pages.rawBookDetailList)
       post("count", Pages.totalRawRecordSize)
       post("download", Pages.download(dir))
-      get("admin", Pages.admin)
+
+      path("admin/", () => {
+        get("index", Pages.Admin.index(port))
+        post("fetch_raw", API.initServer(startUrl, globalPool))
+      })
     })
-    path(
-      "/api",
-      () => {
-        post("/init_server", API.initServer(startUrl))
-        post("/stop", API.stopServer)
-        get("/download_dir", (_, _) => dir)
-        post("/change_conf", API.changeConf(confFileName))
-        get("/conf", API.getConf(config))
-      }
-    )
+
   }
 
   def initDB(): Unit = {
@@ -60,7 +68,9 @@ object Main extends App {
       new RawBookDetail(),
       new Book(),
       new Tag(),
-      new TagBookMap())
+      new TagBookMap(),
+      new CrawLog(),
+      new TagSeriesMap())
       .foreach(_ ())
   }
 

@@ -41,6 +41,7 @@ object Main extends App {
       post("raw", Pages.rawBookDetailList)
       post("count", Pages.totalRawRecordSize)
       post("download", Pages.download(dir))
+      get("admin", Pages.admin)
     })
     path(
       "/api",

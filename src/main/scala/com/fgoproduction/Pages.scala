@@ -1,7 +1,6 @@
 package com.fgoproduction
 
 import java.io.File
-import java.util.concurrent.ExecutorService
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
@@ -151,5 +150,9 @@ object Pages {
     }))
     res.`type`("application/json")
     res
+  }
+
+  def admin(req: Request, res: Response): String = {
+    ""
   }
 }

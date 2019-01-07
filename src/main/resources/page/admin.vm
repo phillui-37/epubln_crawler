@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta content="width=device-width, initial-scale=1, shrink-to-fit=no" name="viewport">
-    <title>輕小說站下載器</title>
+    <title>輕小說站下載器管理版面</title>
     <link rel="stylesheet" href="http://localhost:$port/css/global.css">
 </head>
 <body>
 <div id="core">
 <div class="sidebar">
-    <button type="button" onclick="indexFn.renderUpdateConfPage()">更改配置</button><br/>
-    <button type="button" onclick="indexFn.fetchResource()">爬取列表</button><br/>
-    <button type="button" onclick="indexFn.nonHandledBookList();">未處理目錄</button><br/>
-    <button type="button" onclick="indexFn.allBookList();">原始目錄</button><br/>
-    <button type="button" onclick="indexFn.stop();">關閉服務</button>    
+    <button type="button" onclick="">書籍系列匹配</button><br/>
+    <button type="button" onclick="">系列標籤匹配</button><br/>
+    <button type="button" onclick="">書籍標籤匹配</button><br/>
+    <button type="button" onclick="">匯出SQL</button><br/> <!-- 新&全部 -->
+    <button type="button" onclick="">???</button>
 </div>
 <div class="content">
 <div class="top"></div>

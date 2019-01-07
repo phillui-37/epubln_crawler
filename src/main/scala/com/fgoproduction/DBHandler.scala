@@ -238,6 +238,9 @@ class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
   }
 }
 
+// TODO
+class TagSeriesMap
+
 class TagBookMap(val bookId: Int, val tagId: Int, isInit: Boolean = true)
   extends DBHandler {
   type Fields = (Int, Int, Int)
@@ -351,3 +354,7 @@ class RawBookDetail(val name: String,
     execute(_ execute s"UPDATE $dbName SET dl_link='$newURL' WHERE dl_link='$oldURL'")
   }
 }
+
+
+// TODO
+class CrawLog

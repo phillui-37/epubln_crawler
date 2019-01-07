@@ -21,7 +21,6 @@ object API {
 
   def stopServer(req: Request, res: Response): String = {
     stop()
-
     ""
   }
 

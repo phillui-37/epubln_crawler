@@ -7,9 +7,9 @@
 - ~~online config editing~~
 - ~~open browser automatically when start server~~
 - ~~sorting~~
-- online reading
-- update book list from github release
 - book title/author/publisher classification
+- update book list from github release
+- online reading
 
 ## TODO
 - (Urgent)JS big closure -> pure functions + closure as state(global uniform state)

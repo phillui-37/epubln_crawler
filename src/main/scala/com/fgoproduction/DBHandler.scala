@@ -47,7 +47,8 @@ sealed trait DBHandler {
              order: String = "",
              isDesc: Boolean = false,
              limit: Int = defaultValue("limit").asInstanceOf[Int],
-             offset: Int = defaultValue("offset").asInstanceOf[Int]): Iterator[Fields] = {
+             offset: Int = defaultValue("offset").asInstanceOf[Int])
+  : Iterator[Fields] = {
     val sqlCache: mutable.StringBuilder =
       new mutable.StringBuilder(s"SELECT * FROM $dbName")
     if (condition.nonEmpty) {
@@ -98,7 +99,9 @@ sealed trait DBHandler {
 }
 
 trait ToSQL {
-  abstract def toSQL: String
+  def toSQLNew: String
+
+  def toSQLAll: String
 }
 
 class Series(val name: String,
@@ -107,7 +110,8 @@ class Series(val name: String,
              val downloadProgress: Int,
              val ended: Boolean,
              isInit: Boolean = true)
-  extends DBHandler with ToSQL {
+  extends DBHandler
+    with ToSQL {
   override type Fields = (Int, String, String, Boolean, Int, Boolean)
 
   override val dbName: String = "series"
@@ -150,25 +154,49 @@ class Series(val name: String,
     })
   }
 
-  override def toSQL: String = {
+  override def toSQLNew: String =
     execute(x => {
       val ret = mutable.MutableList[String]()
       val rs = x.executeQuery(
         s"""
            |SELECT d.name, d.publisher, d.ignored, d.progress, d.ended
            |FROM $dbName d, ${new Book().dbName} b, ${new CrawLog().dbName} c, ${new RawBookDetail().dbName} r
-           |WHERE d.id=b.series_id AND b.raw_book_detail_id=r.id AND r.id >= (SELECT raw_id FROM craw_log ORDER BY id DESC LIMIT 1 OFFSET 1)
+           |WHERE d.id=b.series_id AND b.raw_book_detail_id=r.id AND r.id > (SELECT raw_id FROM  ${new CrawLog().dbName} ORDER BY id DESC LIMIT 1 OFFSET 1)
+           |ORDER BY d.id ASC;
         """.stripMargin)
       while (rs.next()) {
         ret +=
           s"""
              |INSERT INTO $dbName(name,publisher,ignored,progress,ended)
-             |VALUES(${rs.getString(1)},${rs.getString(2)},${rs.getBoolean(3)},${rs.getInt(4)},${rs.getBoolean(5)});
+             |VALUES(${rs.getString(1)},${rs.getString(2)},${
+            rs
+              .getBoolean(3)
+          },${rs.getInt(4)},${rs.getBoolean(5)});
             """.stripMargin
       }
       ret.mkString("\n")
     })
-  }
+
+  override def toSQLAll: String =
+    execute(x => {
+      val ret = mutable.MutableList[String]()
+      val rs = x.executeQuery(
+        s"""
+           |SELECT d.name, d.publisher, d.ignored, d.progress, d.ended
+           |FROM $dbName d ORDER BY d.id ASC;
+        """.stripMargin)
+      while (rs.next()) {
+        ret +=
+          s"""
+             |INSERT INTO $dbName(name,publisher,ignored,progress,ended)
+             |VALUES(${rs.getString(1)},${rs.getString(2)},${
+            rs
+              .getBoolean(3)
+          },${rs.getInt(4)},${rs.getBoolean(5)});
+            """.stripMargin
+      }
+      ret.mkString("\n")
+    })
 }
 
 class Book(val seriesId: Int,
@@ -178,7 +206,7 @@ class Book(val seriesId: Int,
            val filePath: String,
            val coverPath: String,
            isInit: Boolean = true)
-  extends DBHandler {
+  extends DBHandler with ToSQL {
   override type Fields = (Int, Int, Int, String, Int, String, String)
   override val dbName: String = "book"
   override val initDbSql: String =
@@ -231,6 +259,44 @@ class Book(val seriesId: Int,
       }
     )
   }
+
+  override def toSQLNew: String = {
+    execute(x => {
+      val ret = mutable.MutableList[String]()
+      val rs = x.executeQuery(
+        s"""
+           |SELECT d.series_id,d.raw_book_detail_id,d.name,d.series_order,d.file_path,d.cover_path
+           |FROM $dbName d, ${new CrawLog().dbName} c, ${new RawBookDetail().dbName} r
+           |WHERE d.raw_book_detail_id=r.id AND r.id > (SELECT raw_id FROM  ${new CrawLog().dbName} ORDER BY id DESC LIMIT 1 OFFSET 1)
+           |ORDER BY d.id ASC;
+        """.stripMargin)
+      while (rs.next()) {
+        ret +=
+          s"""
+             |INSERT INTO $dbName(series_id,raw_book_detail_id,name,series_order,file_path,cover_path)
+             |VALUES(${rs.getString(1)},${rs.getString(2)},${rs.getBoolean(3)},${rs.getInt(4)},${rs.getBoolean(5)});
+            """.stripMargin
+      }
+      ret.mkString("\n")
+    })
+  }
+
+  override def toSQLAll: String = execute(x => {
+    val ret = mutable.MutableList[String]()
+    val rs = x.executeQuery(
+      s"""
+         |SELECT series_id,raw_book_detail_id,name,series_order,file_path,cover_path
+         |FROM $dbName ORDER BY id ASC;
+        """.stripMargin)
+    while (rs.next()) {
+      ret +=
+        s"""
+           |INSERT INTO $dbName(series_id,raw_book_detail_id,name,series_order,file_path,cover_path)
+           |VALUES(${rs.getString(1)},${rs.getString(2)},${rs.getBoolean(3)},${rs.getInt(4)},${rs.getBoolean(5)});
+            """.stripMargin
+    }
+    ret.mkString("\n")
+  })
 }
 
 class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
@@ -262,7 +328,8 @@ class Tag(val tag: String, isInit: Boolean = true) extends DBHandler {
   }
 }
 
-class TagSeriesMap(val seriesId: Int, val tagId: Int, isInit: Boolean = true) extends DBHandler {
+class TagSeriesMap(val seriesId: Int, val tagId: Int, isInit: Boolean = true)
+  extends DBHandler {
   override type Fields = (Int, Int, Int)
   override val dbName: String = "tag_series_map"
   override val initDbSql: String =
@@ -338,7 +405,8 @@ class RawBookDetail(val name: String,
                     val finished: Boolean,
                     val dlLinkType: DownloadLinkType,
                     isInit: Boolean = true)
-  extends DBHandler {
+  extends DBHandler
+    with ToSQL {
   override type Fields =
     (Int, String, String, String, String, Boolean, DownloadLinkType)
   override val dbName: String = "raw_book_detail"
@@ -406,17 +474,51 @@ class RawBookDetail(val name: String,
   }
 
   def updateDownloadLink(oldURL: String, newURL: String): Unit = {
-    execute(_ execute s"UPDATE $dbName SET dl_link='$newURL' WHERE dl_link='$oldURL'")
+    execute(
+      _ execute s"UPDATE $dbName SET dl_link='$newURL' WHERE dl_link='$oldURL'")
   }
 
   def latestRecordId: Int = {
     execute(x => {
-      val rs = x.executeQuery(s"SELECT id from $dbName ORDER BY ID DESC LIMIT 1")
+      val rs =
+        x.executeQuery(s"SELECT id from $dbName ORDER BY ID DESC LIMIT 1")
       rs.getInt(1)
     })
   }
-}
 
+  override def toSQLAll: String =
+    execute(x => {
+      val ret = mutable.MutableList[String]()
+      val rs = x.executeQuery(
+        s"SELECT name,page_link,img_link,dl_link,finished,dl_link_type FROM $dbName")
+      while (rs.next()) {
+        ret += s"INSERT $dbName(name,page_link,img_link,dl_link,finished,dl_link_type)" +
+          s"VALUES(${rs.getString(1)},${rs.getString(2)},${rs.getString(3)},${
+            rs
+              .getString(4)
+          },${rs.getBoolean(5)},${rs.getInt(6)});"
+      }
+      ret.mkString("\n")
+    })
+
+  override def toSQLNew: String =
+    execute(x => {
+      val ret = mutable.MutableList[String]()
+      val rs = x.executeQuery(
+        s"SELECT d.name,d.page_link,d.img_link,d.dl_link,d.finished,d.dl_link_type" +
+          s"FROM $dbName d, ${new CrawLog().dbName} c" +
+          s"WHERE d.id > (SELECT raw_id FROM ${new CrawLog().dbName} ORDER BY id DESC LIMIT 1 OFFSET 1);"
+      )
+      while (rs.next()) {
+        ret += s"INSERT $dbName(name,page_link,img_link,dl_link,finished,dl_link_type)" +
+          s"VALUES(${rs.getString(1)},${rs.getString(2)},${rs.getString(3)},${
+            rs
+              .getString(4)
+          },${rs.getBoolean(5)},${rs.getInt(6)});"
+      }
+      ret.mkString("\n")
+    })
+}
 
 class CrawLog(val rawId: Int, isInit: Boolean = true) extends DBHandler {
   override type Fields = (Int, Int, Long)
@@ -451,4 +553,5 @@ class CrawLog(val rawId: Int, isInit: Boolean = true) extends DBHandler {
     result.getInt("raw_id"),
     result.getLong("time_log")
   )
+
 }

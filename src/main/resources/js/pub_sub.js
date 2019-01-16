@@ -19,6 +19,13 @@ const PostOffice = (() => {
             }
         }
     };
+    const publishFromSubscriber = (channel, id, value) => {
+        if (key_exists(channel)) {
+            for (let k of Object.keys(sub_map[channel]).filter(x => x !== id)) {
+                sub_map[channel][k](value);
+            }
+        }
+    };
     const unregister = channel => {
         if (key_exists(channel)) {
             delete sub_map[channel];
@@ -29,12 +36,18 @@ const PostOffice = (() => {
             sub_map[channel] = {};
         }
     };
+    const initRegister = (value, channel) => {
+        register(channel);
+        return value;
+    };
     return {
         subscribe,
         publish,
         register,
         channelList,
         unregister,
-        unsubscribe
+        unsubscribe,
+        publishFromSubscriber,
+        initRegister,
     };
-})();
+})()();

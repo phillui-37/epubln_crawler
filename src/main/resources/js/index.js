@@ -1,12 +1,13 @@
 const indexFn = (() => {
-    let offset = 0;
-    let limit = 20;
-    let isDesc = true;
-    let field = "name";
+    let pubSub = PostOffice();
+    let offset = pubSub.register("offset", 0);
+    let limit = pubSub.register("limit", 20);
+    let isDesc = pubSub.register("isDesc", true);
+    let field = pubSub.register("field", "name");
     let totalRecordSize = 0;
     let port = 0;
-    let search = "";
-    let isAll = false;
+    let search = pubSub.register("search", "");
+    let isAll = pubSub.register("isAll", false);
     let downloadQueue = [];
     const fieldMap = {
         "名字": "name",

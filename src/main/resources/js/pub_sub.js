@@ -2,10 +2,12 @@ const Postman = (id, v) => {
     let subMap = {};
     let key_ = id;
     let value_ = v;
-    const change = (id, value) => {
+    const change = (key = undefined, src = undefined) => value => {
         value_ = value;
-        for (let k of Object.keys(subMap).filter(x => x !== id)) {
-            subMap[k](value);
+        if (!(src instanceof Postman)) {
+            for (let k of Object.keys(subMap).filter(x => x !== key)) {
+                subMap[k](value);
+            }
         }
     };
     const listen = (id, cb) => subMap[id] = cb;
@@ -32,7 +34,7 @@ const PostOffice = (() => {
             delete subMap[channel];
         }
     };
-    const register = (channel, value) => {
+    const register = /** @type Postman */ (channel, value) => {
         if (!keyExists(channel)) {
             subMap[channel] = Postman(channel, value);
         }

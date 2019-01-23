@@ -3,3 +3,5 @@ project/
 target/
 *.class
 *.log
+node_modules/
+package-lock.json

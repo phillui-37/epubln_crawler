@@ -19,7 +19,8 @@
 <div class="display-area"></div>
 </div>
 </div>
-<script src="http://localhost:$port/js/index.js"></script>
+<script src="http://localhost:$port/js/pub_sub.js"></script>
+<script src="http://localhost:$port/js/admin.js"></script>
 <script>indexFn.init($port);</script>
 </body>
 </html>

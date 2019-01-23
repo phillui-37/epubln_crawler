@@ -1,122 +1,45 @@
 const indexFn = (() => {
-    let pubSub = PostOffice();
-    let offset = pubSub.register("offset", 0);
-    let limit = pubSub.register("limit", 20);
-    let isDesc = pubSub.register("isDesc", true);
-    let field = pubSub.register("field", "name");
-    let totalRecordSize = 0;
+    const offset = PostOffice.register("offset", 0);
+    const limit = PostOffice.register("limit", 20);
+    const isDesc = PostOffice.register("isDesc", true);
+    const field = PostOffice.register("field", "name");
+    const isAll = PostOffice.register("isAll", false);
+    const search = PostOffice.register("search", "");
+    const totalRecordSize = PostOffice.register("totalRecordSize", 0);
     let port = 0;
-    let search = pubSub.register("search", "");
-    let isAll = pubSub.register("isAll", false);
     let downloadQueue = [];
-    const fieldMap = {
-        "名字": "name",
-        "圖片連接": "img_link",
-        "檔案連接": "dl_link",
-    };
-    const createTable = params => {
-        let ret = '<table><thead><tr>';
-        ret += '<th>全選<input type="checkbox" onchange="indexFn.checkAll()"></th>'
-        for (const i in params.head) {
-            let text;
-            if (field === fieldMap[params.head[i]]) {
-                text = `<div onclick='indexFn.sort("${fieldMap[params.head[i]]}")'>${params.head[i]} ${isDesc?"&#8595;":"&#8593;"}</div>`
-            } else {
-                text = `<div onclick='indexFn.sort("${fieldMap[params.head[i]]}")'>${params.head[i]}</div>`
-            }
-            ret += `<th>${text}</th>`;
-        }
-        ret += '</tr></thead><tbody>'
 
-        for (const i in params.body) {
-            ret += '<tr>'
-            for (const j in params.body[i]) {
-                ret += `<td>${params.body[i][j]}</td>`
-            }
-            ret += '</tr>'
-        }
-        ret += '</tbody></table>'
-        return ret;
-    };
     const getTotalRecordSize = async () => await fetch(
-            `http://localhost:${port}/count`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    related_names: search
-                })
+        `http://localhost:${port}/count`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                related_names: search.get()
             })
-        .then(res => res.json())
-        .then(c => {
-            totalRecordSize = c;
         })
+        .then(res => res.json())
+        .then(totalRecordSize.change())
         .catch(console.error);
-    const renderTop = async () => {
-        let html = `<div class="search-box"><input id="search" value="${search}" type="text" placeholder="搜尋" oninput="indexFn.setSearch(this.value)"><button type="button" onclick="indexFn.search();">搜尋</button></div>`;
-        html += '<div class="multi-download"><button type="button" onclick="indexFn.invokeServerDownload()">多項下載</button><button type="button" onclick="indexFn.customDownload()">自選目錄下載</button></div>';
-        html += '<div class="page-nav"><button type="button" onclick="indexFn.prevPage()">上一頁</button>';
-        html += '<select id="page" onchange="indexFn.choosePage(this.value)">';
-        const maxPage = Math.ceil(totalRecordSize / limit);
-        for (let i = 1; i <= maxPage; i++) {
-            html += `<option value="${i}">${i}</option>`;
+    const init = async (p = port) => {
+        port = p;
+        await getTotalRecordSize();
+        await render.top();
+        await render.table();
+    };
+    const sort = newField => {
+        if (newField === field) {
+            isDesc.change();
+        } else {
+            field = newField;
+            isDesc = true;
         }
-        html += '</select><button type="button" onclick="indexFn.nextPage()">下一頁</button></div>';
-        document.querySelector('div.top').innerHTML = html;
-    };
-    const renderTable = async () => {
-        const html = {
-            head: ["名字", "圖片連接", "檔案連接"],
-            body: []
-        };
-        await fetch(`http://localhost:${port}/raw`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    limit,
-                    offset,
-                    isDesc,
-                    field,
-                    search,
-                    isAll
-                })
-            })
-            .then(res => res.json())
-            .then(ls => {
-                for (const i in ls) {
-                    html.body.push([
-                        `<input type="checkbox" class="book-option" onchange="indexFn.select('${ls[i].dl_link}')">`,
-                        `<a href="${ls[i].page_link}">${ls[i].name}</a>`,
-                        `<a href="${ls[i].img_link}"><img src="${ls[i].img_link}"></a>`,
-                        `<button type="button" onclick="indexFn.download('${ls[i].dl_link}')">下載</button>`
-                    ])
-                }
-            })
-            .catch(console.error);
-        document.querySelector("div.display-area").innerHTML = createTable(html);
-    };
-    const clearTop = () => {
-        document.querySelector("div.top").innerHTML = "";
+        indexFn.init();
     };
     return {
-        init: async (p = port) => {
-            port = p;
-            await getTotalRecordSize();
-            await renderTop();
-            await renderTable();
-        },
-        sort: newField => {
-            if (newField === field) {
-                isDesc = !isDesc;
-            } else {
-                field = newField;
-                isDesc = true;
-            }
-            indexFn.init();
-        },
+        init,
+        sort,
         nonHandledBookList: () => {
             isAll = false;
             indexFn.init();
@@ -193,15 +116,15 @@ const indexFn = (() => {
             const target = [...downloadQueue];
             downloadQueue = [];
             await fetch(`http://localhost:${port}/download`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        dlLinks: target,
-                        dir
-                    })
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    dlLinks: target,
+                    dir
                 })
+            })
                 .then(res => res.json())
                 .then(map => {
                     let html;
@@ -220,8 +143,8 @@ const indexFn = (() => {
         fetchResource: () => {
             clearTop();
             fetch(`http://localhost:${port}/api/update_db`, {
-                    method: 'POST'
-                })
+                method: 'POST'
+            })
                 .then(_ => {
                     document.querySelector('div.display-area').innerHTML = "已開始更新資源列表,5秒後將回到未處理列表"
                     setTimeout(indexFn.init, 5000);
@@ -244,16 +167,16 @@ const indexFn = (() => {
         },
         updateConf: async () => {
             await fetch(`http://localhost:${port}/api/change_conf`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        dir: document.querySelector("input#conf-dir").value,
-                        geckodriver_location: document.querySelector("input#conf-gecko").value,
-                        'port': document.querySelector("input#conf-port").value
-                    })
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    dir: document.querySelector("input#conf-dir").value,
+                    geckodriver_location: document.querySelector("input#conf-gecko").value,
+                    'port': document.querySelector("input#conf-port").value
                 })
+            })
                 .then(_ => {
                     document.querySelector('div.content').innerHTML = '更新配置成功,服務器將於5秒後關閉,請重新開啟';
                     setTimeout(indexFn.stop, 5000);

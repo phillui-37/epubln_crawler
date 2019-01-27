@@ -1,14 +1,13 @@
-const render = ((pubSub) => {
+const render = (() => {
     const fieldMap = {
         "名字": "name",
         "圖片連接": "img_link",
         "檔案連接": "dl_link",
     };
-    const isDesc = pubSub.register("isDesc", true);
-    const isAll = pubSub.register("isAll", false);
+    const isDesc = PostOffice.register("isDesc", true);
     const arrow = () => isDesc.get()?"&#8595;":"&#8593;";
 
-    const createTable = params => {
+    const createTable = (field, params) => {
         let ret = '<table><thead><tr>';
         ret += '<th>全選<input type="checkbox" onchange="indexFn.checkAll()"></th>';
         for (const i in params.head) {
@@ -28,7 +27,7 @@ const render = ((pubSub) => {
         ret += '</tbody></table>';
         return ret;
     };
-    const table = async () => {
+    const table = async (params) => {
         const html = {
             head: Object.keys(fieldMap),
             body: []
@@ -39,12 +38,12 @@ const render = ((pubSub) => {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    limit,
-                    offset,
-                    isDesc,
-                    field,
-                    search,
-                    isAll
+                    limit: params.limit,
+                    offset: params.offset,
+                    isDesc: isDesc.get(),
+                    field: params.field,
+                    search: params.search,
+                    isAll: params.isAll
                 })
             })
             .then(res => res.json())
@@ -59,9 +58,9 @@ const render = ((pubSub) => {
                 }
             })
             .catch(console.error);
-        document.querySelector("div.display-area").innerHTML = createTable(html);
+        document.querySelector("div.display-area").innerHTML = createTable(params.field, html);
     };
-    const top = async () => {
+    const top = async (totalRecordSize, limit, search) => {
         let html = `<div class="search-box"><input id="search" value="${search}" type="text" placeholder="搜尋" oninput="indexFn.setSearch(this.value)"><button type="button" onclick="indexFn.search();">搜尋</button></div>`
         + '<div class="multi-download"><button type="button" onclick="indexFn.invokeServerDownload()">多項下載</button><button type="button" onclick="indexFn.customDownload()">自選目錄下載</button></div>'
         + '<div class="page-nav"><button type="button" onclick="indexFn.prevPage()">上一頁</button>'
@@ -82,4 +81,4 @@ const render = ((pubSub) => {
         top,
         clearTop
     };
-})(PostOffice);
+})();

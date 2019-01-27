@@ -22,7 +22,11 @@
 <div class="display-area"></div>
 </div>
 </div>
+<script>
+    var port = $port;
+</script>
 <script src="http://localhost:$port/js/pub_sub.js"></script>
+<script src="http://localhost:$port/js/render.js"></script>
 <script src="http://localhost:$port/js/index.js"></script>
 <script>indexFn.init($port);</script>
 </body>

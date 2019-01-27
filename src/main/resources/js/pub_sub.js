@@ -2,12 +2,11 @@ const Postman = (id, v) => {
     let subMap = {};
     let key_ = id;
     let value_ = v;
-    const change = (key = undefined, src = undefined) => value => {
+    const changeWithoutPublish = value => {value_ = value};
+    const change = (key = undefined) => value => {
         value_ = value;
-        if (!(src instanceof Postman)) {
-            for (let k of Object.keys(subMap).filter(x => x !== key)) {
-                subMap[k](value);
-            }
+        for (let k of Object.keys(subMap).filter(x => x !== key)) {
+            subMap[k](value);
         }
     };
     const listen = (id, cb) => subMap[id] = cb;
@@ -18,6 +17,7 @@ const Postman = (id, v) => {
     const getKey = () => key_;
     return {
         change,
+        changeWithoutPublish,
         listen,
         cancelListen,
         get,
@@ -31,14 +31,14 @@ const PostOffice = (() => {
     const postmanList = () => Object.keys(postmanMap);
     const unregister = channel => {
         if (keyExists(channel)) {
-            delete subMap[channel];
+            delete postmanMap[channel];
         }
     };
     const register = /** @type Postman */ (channel, value) => {
         if (!keyExists(channel)) {
-            subMap[channel] = Postman(channel, value);
+            postmanMap[channel] = Postman(channel, value);
         }
-        return subMap[channel];
+        return postmanMap[channel];
     };
     return {
         register,

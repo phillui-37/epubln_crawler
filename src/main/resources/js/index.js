@@ -15,41 +15,44 @@ const indexFn = (() => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                related_names: searchCache
+                related_names: searchCache,
+                is_all: isAll.get()
             })
         })
         .then(res => res.json())
         .then(totalRecordSize.change())
         .catch(console.error);
     const registerCb = () => {
-        totalRecordSize.listen('offset', (_) => offset.change('totalRecordSize')(0));
-        limit.listen('offset', (_) => offset.change('limit')(0));
-        isDesc.listen('offset', (_) => offset.change('isDesc')(0));
-        field.listen('offset', (_) => offset.change('field')(0));
-        isAll.listen('getAll', init);
-        offset.listen('init', (_) => {init()});
+        totalRecordSize.subscribe('offset', (_) => offset.change('totalRecordSize')(0));
+        limit.subscribe('offset', (_) => offset.change('limit')(0));
+        isDesc.subscribe('offset', (_) => offset.change('isDesc')(0));
+        field.subscribe('offset', (_) => offset.change('field')(0));
+        isAll.subscribe('getAll', (_) => {renderAll()});
+        offset.subscribe('render', (_) => {reRenderListOnly()});
     };
     const renderTable = async () => await render.table({ limit: limit.get(), offset: offset.get(), field: field.get(), search: searchCache, isAll: isAll.get() });
-    const init = async () => {
+    const renderAll = async () => {
         await getTotalRecordSize();
         await render.top(totalRecordSize.get(), limit.get(), searchCache);
         await renderTable();
     };
-    const firstInit = async() => {
-        await init();
-        registerCb();
-    }
-    const sort = newField => {
-        if (newField === field) {
-            isDesc.change()(false);
-        } else {
-            field = newField;
-            isDesc = true;
-        }
-        init();
+    const reRenderListOnly = async () => {
+        await renderTable();
     };
-    const nonHandledBookList = () => isAll.change("getAll")(false);
-    const allBookList = () => isAll.change("getAll")(true);
+    const init = async () => {
+        registerCb();
+        await renderAll();
+    };
+    const sort = newField => {
+        if (newField === field.get()) {
+            isDesc.change()(!isDesc.get());
+        } else {
+            field.changeWithoutPublish(newField);
+            isDesc.change('sort')(true);
+        }
+    };
+    const nonHandledBookList = () => isAll.change()(false);
+    const allBookList = () => isAll.change()(true);
     const checkAll = () => {
         const target = document.getElementsByClassName("book-option");
         for (let i = 0; i < target.length; i++) {
@@ -61,19 +64,16 @@ const indexFn = (() => {
         if (offset.get() < totalRecordSize.get() - limit.get()) {
             offset.change('select#page')(offset.get() + limit.get());
             document.querySelector("select#page").value = (offset.get() / limit.get()) + 1;
-            renderTable();
         }
     };
     const prevPage = async () => {
-        if (offset >= limit) {
+        if (offset.get() >= limit.get()) {
             offset.change('select#page')(offset.get() - limit.get());
             document.querySelector("select#page").value = (offset.get() / limit.get()) + 1;
-            renderTable();
         }
     };
     const choosePage = pageNo => {
         offset.change('select#page')((pageNo - 1) * limit.get());
-        renderTable();
     };
     const changeLimit = newLimit => {
         limit.change('changeLimit')(newLimit);
@@ -207,6 +207,7 @@ const indexFn = (() => {
         renderUpdateConfPage,
         updateConf,
         stop,
-        firstInit
+        renderAll,
+        reRenderListOnly
     };
 })();

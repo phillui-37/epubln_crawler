@@ -96,8 +96,17 @@ object Pages {
     } else {
       List()
     }
+    val isAll = if (params != null && params.has("is_all")) {
+      params.get("is_all").asBoolean(true)
+    } else {
+      false
+    }
     val result = new RawBookDetail()
-      .recordsCount(default.map(x => s"name LIKE '%$x%'").iterator)
+      .recordsCount(default.map(x => s"name LIKE '%$x%'").iterator ++ {
+        if (!isAll) {
+          Iterator(s"finished=0")
+        } else Iterator()
+      })
     res.body(mapper.writeValueAsString(result))
     res.`type`("application/json")
     res

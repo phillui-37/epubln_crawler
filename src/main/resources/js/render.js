@@ -61,6 +61,7 @@ const render = (() => {
         document.querySelector("div.display-area").innerHTML = createTable(params.field, html);
     };
     const top = async (totalRecordSize, limit, search) => {
+        console.log(`size: ${totalRecordSize}, limit: ${limit}, search: ${search}`);
         let html = `<div class="search-box"><input id="search" value="${search}" type="text" placeholder="搜尋" oninput="indexFn.setSearch(this.value)"><button type="button" onclick="indexFn.search();">搜尋</button></div>`
         + '<div class="multi-download"><button type="button" onclick="indexFn.invokeServerDownload()">多項下載</button><button type="button" onclick="indexFn.customDownload()">自選目錄下載</button></div>'
         + '<div class="page-nav"><button type="button" onclick="indexFn.prevPage()">上一頁</button>'

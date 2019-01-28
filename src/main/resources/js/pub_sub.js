@@ -9,8 +9,8 @@ const Postman = (id, v) => {
             subMap[k](value);
         }
     };
-    const listen = (id, cb) => subMap[id] = cb;
-    const cancelListen = id => {
+    const subscribe = (id, cb) => subMap[id] = cb;
+    const unsubscribe = id => {
         delete subMap[id];
     };
     const get = () => value_;
@@ -18,8 +18,8 @@ const Postman = (id, v) => {
     return {
         change,
         changeWithoutPublish,
-        listen,
-        cancelListen,
+        subscribe,
+        unsubscribe,
         get,
         getKey
     };

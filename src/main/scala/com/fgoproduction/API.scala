@@ -12,11 +12,8 @@ import scala.collection.JavaConverters._
 
 object API {
   def initServer(startURL: String, pool: ExecutorService)(req: Request, res: Response): Response = {
-    if (new CategoryPageHandler(startURL).init(pool)) {
-      res.status(200)
-    } else {
-      res.status(500)
-    }
+    new CategoryPageHandler(startURL).init(pool)
+    res.status(200)
     res
   }
 

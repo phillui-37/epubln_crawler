@@ -77,7 +77,7 @@ sealed trait DBHandler {
     val conn = DriverManager getConnection connStr
     val stmt = conn.createStatement()
     try {
-      f(stmt)
+      synchronized(f(stmt))
     } finally {
       stmt.close()
       conn.close()
@@ -89,8 +89,10 @@ sealed trait DBHandler {
     val conn = DriverManager getConnection connStr
     val stmt = conn.prepareStatement(sql)
     try {
-      f(stmt)
-      stmt.executeUpdate()
+      synchronized {
+        f(stmt)
+        stmt.executeUpdate()
+      }
     } finally {
       stmt.close()
       conn.close()

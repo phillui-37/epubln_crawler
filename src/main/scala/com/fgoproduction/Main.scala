@@ -1,12 +1,13 @@
 package com.fgoproduction
 
-import java.io.File
+import java.io._
 import java.net.URI
 import java.util.concurrent.{ExecutorService, Executors}
 
 import com.moandjiezana.toml.Toml
 import spark.Spark._
 
+import scala.collection.mutable
 import scala.language.postfixOps
 
 object Main extends App {
@@ -18,12 +19,35 @@ object Main extends App {
   }) ()
 
   override def main(args: Array[String]): Unit = {
+    println()
     val conf = config
     java.awt.Desktop.getDesktop.browse(new URI(s"http://localhost:${conf.getLong("port").toString}"))
     setUp(conf)
+    //    new CategoryPageHandler(startUrl).getAllUnfinishedPage.foreach(println)
   }
 
-  def config: Toml = new Toml().read(new File(confFileName))
+  def config: Toml = {
+    if (System.getProperty("os.name").toLowerCase.contains("windows")) {
+      val reader = new BufferedReader(new FileReader(new File(confFileName)))
+      val ls: mutable.MutableList[String] = mutable.MutableList()
+      try {
+        while (true) {
+          reader.readLine() match {
+            case null => throw new RuntimeException()
+            case s => ls += s.replace("\\\\", "\\").replace("\"", "'")
+          }
+        }
+      } catch {
+        case _: RuntimeException =>
+        case e: Exception => throw e
+      } finally {
+        reader.close()
+      }
+      new Toml().read(ls.mkString("\n"))
+    } else {
+      new Toml().read(new File(confFileName))
+    }
+  }
 
   def confFileName: String = "conf.toml"
 

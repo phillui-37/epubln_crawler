@@ -14,7 +14,6 @@ import org.openqa.selenium._
 import org.openqa.selenium.firefox.{FirefoxDriver, FirefoxOptions, FirefoxProfile}
 import org.openqa.selenium.support.ui.{ExpectedConditions, WebDriverWait}
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Codec
@@ -70,69 +69,67 @@ sealed trait PageHandler {
 }
 
 class CategoryPageHandler(url: String) extends PageHandler {
-  override lazy val doc: Document = docFn(url)
-
-  override def apply(): List[PageHandler] = {
-    getAllBooksDetailPageLinks.map(new DownloadPageHandler(_)) ++
-      getPrevPageLink.map(new CategoryPageHandler(_))
-  }
-
-  def getAllBooksDetailPageLinks: List[String] = getHrefs(url, ".anes")
-
-  def getPrevPageLink: Option[String] = {
-    val target = getHrefs(url, "#Blog1_blog-pager-older-link")
-    target.headOption
-  }
-
-  def init(pool: ExecutorService): Boolean = {
+  override lazy val doc: Document = {
+    val options = new FirefoxOptions()
+    options.setHeadless(true)
+    val browser = new FirefoxDriver(options)
     try {
-      println("Start Init Server")
-      val thread = new Thread(() =>
-        exec(pool, apply(), () => {
-          new CrawLog(new RawBookDetail().latestRecordId).write()
-        }))
-      thread.setDaemon(true)
-      thread.start()
-      true
-    } catch {
-      case e: Exception =>
-        println(e)
-        false
+      browser.get(url)
+      val xpath = "//div[@class='widget-content list-label-widget-content']"
+      new WebDriverWait(browser, 2)
+        .until(ExpectedConditions.presenceOfElementLocated(By.xpath(xpath)))
+      val target = browser.findElementByXPath(xpath).getAttribute("innerHTML")
+      Jsoup parse target
+    } finally {
+      browser close()
     }
+  }
+  lazy val pageList: List[String] = doc
+    .getElementsByTag("a")
+    .asScala
+    .filter(_ hasAttr "dir")
+    .map(_ attr "href")
+    .filter(!_.contains("%E5%85%B6%E4%BB%96"))
+    .toList
+
+  def getAllUnfinishedPage: List[String] =
+    pageList
+      .filter(_ contains "%E5%BE%85%E7%BA%8C")
+
+  def getAllFinishedPage: List[String] =
+    pageList
+      .filter(_ contains "%E5%AE%8C%E7%B5%90")
+
+  def init(pool: ExecutorService): Unit = {
+    println("Start Init Server")
+    new Thread {
+      override def run(): Unit = {
+        apply().map(x => pool.submit(() => x())).flatMap(_ get).map(x => pool.submit(() => x())).flatMap(_ get)
+        new CrawLog(new RawBookDetail().latestRecordId).write()
+      }
+    }.start()
   }
 
   def refresh(): Unit = {
     println("Start Refresh Resource List")
-
-    @tailrec
-    def core(ls: List[PageHandler]): List[PageHandler] = {
-      ls.head match {
-        case handler: DownloadPageHandler =>
-          if (!handler.isNew) {
-            return List()
-          }
-        case _ =>
-      }
-      core(ls.tail ++ ls.head())
-    }
-
-    core(apply())
+    apply().foreach(_ refresh())
     println("Finished")
   }
 
-  @tailrec
-  private def exec(
-                    pool: ExecutorService,
-                    ls: List[PageHandler],
-                    finishCb: () => Unit
-                  ): List[PageHandler] = {
-    if (ls.isEmpty) {
-      println("Finish Init Server")
-      finishCb()
-      return List()
-    }
-    exec(pool, ls.map(x => pool.submit(() => x())).flatMap(_ get), finishCb)
+  override def apply(): List[TagPageHandler] = {
+    pageList.map(new TagPageHandler(_))
   }
+}
+
+class TagPageHandler(url: String) extends PageHandler {
+  override lazy val doc: Document = docFn(url)
+
+  override def apply(): List[DownloadPageHandler] = {
+    println(s"Handling ${URLDecoder.decode(url, "UTF-8")}")
+    getHrefs(url, ".anes").map(new DownloadPageHandler(_))
+  }
+
+  def refresh(): Unit = {}
 }
 
 class DownloadPageHandler(url: String) extends PageHandler {
